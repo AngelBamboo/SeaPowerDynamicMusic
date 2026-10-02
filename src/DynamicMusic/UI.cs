@@ -129,8 +129,8 @@ namespace SeaPowerDynamicMusic
 
             if (!enabled) return false;
 
-            // 按下或松开都算点击，任一成立即触发
-            return MouseInput.Contains(r) && (MouseInput.Pressed || MouseInput.Released);
+            // 只认「按下」并按帧去重，否则一次点击会被处理多次
+            return MouseInput.Contains(r) && MouseInput.Pressed && ConsumeClick();
         }
 
         /// <summary>
@@ -175,6 +175,23 @@ namespace SeaPowerDynamicMusic
         }
 
         /// <summary>
+        /// 已消费点击的帧号。
+        ///
+        /// Unity 的 OnGUI 每帧会被调用多次（Layout / Repaint / Input），
+        /// 若不按帧去重，一次点击会被处理多次，表现为勾选框闪一下又变回去。
+        /// </summary>
+        private static int _consumedFrame = -1;
+
+        /// <summary>本帧是否已经消费过一次点击。</summary>
+        internal static bool ConsumeClick()
+        {
+            int frame = Time.frameCount;
+            if (_consumedFrame == frame) return false;
+            _consumedFrame = frame;
+            return true;
+        }
+
+        /// <summary>
         /// 自绘勾选框，返回 true 表示被点击（由调用方翻转状态）。
         /// 方框与文字分开画，文字区也能点，按钮区更宽更好点。
         /// </summary>
@@ -207,9 +224,9 @@ namespace SeaPowerDynamicMusic
                 r.width - boxSize - 5f, r.height);
             Label(textRect, text, false, !value);
 
-            // 只认「按下」。若按下和松开都算，一次点击会翻转两次，
-            // 表现为方框闪一下又变回原样。
-            return MouseInput.Contains(r) && MouseInput.Pressed;
+            // 只认「按下」，并按帧去重。OnGUI 每帧会调多次，
+            // 不去重的话一次点击会被处理多次，方框闪一下又变回去。
+            return MouseInput.Contains(r) && MouseInput.Pressed && ConsumeClick();
         }
     }
 }

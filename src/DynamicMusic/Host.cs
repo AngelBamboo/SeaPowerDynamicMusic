@@ -76,7 +76,12 @@ namespace SeaPowerDynamicMusic
                 _panel = MusicPanel.Create(transform);
             }
 
-            if (Settings.ReplaceVanilla) SilenceVanillaMusic();
+            if (Settings.ReplaceVanilla)
+                {
+                    // 持续压制，不是一次性停播
+                    _silence = true;
+                    SilenceVanillaMusic();
+                }
 
             Director.Begin();
 
@@ -186,43 +191,59 @@ namespace SeaPowerDynamicMusic
         }
 
         /// <summary>
+        /// 阻止游戏继续播放它自己的音乐。
+        ///
+        /// 只调一次 Stop 是不够的：游戏在切换场景时会再次调用
+        /// PlayMusic / PlayCurrentlySelectedMusic 重新起播，
+        /// 于是两路音乐叠在一起。这里持续压制，直到宿主销毁。
+        /// </summary>
+        private float _silenceTimer;
+
+        private void Update()
+        {
+            if (!_silence) return;
+
+            _silenceTimer += Time.unscaledDeltaTime;
+            if (_silenceTimer < 0.25f) return;
+            _silenceTimer = 0f;
+
+            SilenceVanillaMusic();
+        }
+
+        private bool _silence;
+
+        /// <summary>
         /// 让游戏自带的 MusicManager 停播，避免和自定义音乐叠在一起。
-        /// 用反射调用，找不到就跳过，不影响自定义音乐播放。
+        /// 全部用反射调用，找不到就跳过，不影响自定义音乐播放。
         /// </summary>
         private static void SilenceVanillaMusic()
         {
             try
             {
                 Type t = AccessTools.TypeByName("SeaPower.MusicManager");
-                if (t == null)
+                if (t == null || t.BaseType == null) return;
+
+                var getter = AccessTools.Method(t.BaseType, "get_Instance");
+                if (getter == null) return;
+
+                object manager = getter.Invoke(null, null);
+                if (manager == null) return;
+
+                // RemoveCurrentTrack 会把当前曲目从列表移除并停播，
+                // 比单纯 Stop 更彻底，可避免游戏随后又起播。
+                var remove = AccessTools.Method(t, "RemoveCurrentTrack");
+                if (remove != null)
                 {
-                    Plugin.LogWarn("未找到 MusicManager，无法自动停掉原生音乐。");
+                    remove.Invoke(manager, null);
                     return;
                 }
 
-                UnityEngine.Object[] all = Resources.FindObjectsOfTypeAll(t);
-                if (all == null || all.Length == 0)
-                {
-                    Plugin.LogWarn("场景中没有 MusicManager 实例，可能尚未创建。");
-                    return;
-                }
-
-                System.Reflection.MethodInfo stop = AccessTools.Method(t, "Stop");
-                if (stop == null)
-                {
-                    Plugin.LogWarn("MusicManager.Stop 不存在，跳过。");
-                    return;
-                }
-
-                for (int i = 0; i < all.Length; i++)
-                {
-                    stop.Invoke(all[i], null);
-                }
-                Plugin.LogInfo("已停掉游戏原生音乐。");
+                var stop = AccessTools.Method(t, "Stop");
+                if (stop != null) stop.Invoke(manager, null);
             }
             catch (Exception e)
             {
-                Plugin.LogWarn("停掉原生音乐时出错（不影响自定义音乐）: " + e.Message);
+                Plugin.Verbose("停掉原生音乐时出错（不影响自定义音乐）: " + e.Message);
             }
         }
     }

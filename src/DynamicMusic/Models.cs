@@ -321,35 +321,34 @@ namespace SeaPowerDynamicMusic
                     return 0;
                 }
 
-                var list = clipsField.GetValue(manager) as System.Collections.IEnumerable;
-                if (list == null)
-                {
-                    Plugin.LogWarn("官方音乐列表为 null，游戏可能还在加载。");
-                    return 0;
-                }
-
                 int added = 0;
                 int total = 0;
-                foreach (object item in list)
+                var list = clipsField.GetValue(manager) as System.Collections.IEnumerable;
+                if (list != null)
                 {
-                    total++;
-                    if (item == null) continue;
-                    AddClip(library, item, ref added);
+                    foreach (object item in list)
+                    {
+                        total++;
+                        if (item == null) continue;
+                        AddClip(library, item, ref added);
+                    }
                 }
 
-                if (total == 0)
+                // _allClips 常常只含当前选中的那一项，其余曲目由 MusicManager
+                // 持有在别处（音频源与缓存）。这里再从 AudioSource 回收。
+                int fromSources = CollectFromAudioSources(library, mmType, manager);
+
+                if (added > 0)
                 {
-                    Plugin.LogWarn("官方音乐列表为空，游戏可能还没加载完。点一次“重新扫描”即可。");
-                }
-                else if (added > 0)
-                {
-                    Plugin.LogInfo(string.Format("已导入 {0} 首游戏自带音乐（列表共 {1} 项）",
-                        added, total));
+                    Plugin.LogInfo(string.Format(
+                        "已导入 {0} 首游戏自带音乐（_allClips {1} 项，音频源 {2} 项）",
+                        added, total, fromSources));
                 }
                 else
                 {
                     Plugin.LogWarn(string.Format(
-                        "官方音乐列表有 {0} 项但未能导入，字段名可能已变化。", total));
+                        "未能导入官方音乐（_allClips {0} 项，音频源 {1} 项）。" +
+                        "若游戏更新改了字段名，界面里将看不到官方曲目。", total, fromSources));
                 }
                 return added;
             }
@@ -358,6 +357,52 @@ namespace SeaPowerDynamicMusic
                 Plugin.LogWarn("读取游戏自带音乐失败: " + e.Message);
                 return 0;
             }
+        }
+
+        /// <summary>
+        /// 从 MusicManager 持有的 AudioSource 里回收官方曲目。
+        /// _allClips 通常只有当前选中项，其余仍在 AudioSource 上播放，
+        /// 这里把它们也纳入面板，用户才能对全部官方曲目调权重。
+        /// </summary>
+        private static int CollectFromAudioSources(MusicLibrary library,
+            Type mmType, object manager)
+        {
+            int found = 0;
+            try
+            {
+                var sourcesField = AccessTools.Field(mmType, "_audioSources");
+                if (sourcesField == null) return 0;
+
+                var collection = sourcesField.GetValue(manager) as System.Collections.IEnumerable;
+                if (collection == null) return 0;
+
+                foreach (object source in collection)
+                {
+                    if (source == null) continue;
+
+                    // AudioSource.clip 就是 AudioClip
+                    var clipProp = AccessTools.PropertyGetter(source.GetType(), "clip");
+                    if (clipProp == null) continue;
+
+                    var clip = clipProp.Invoke(source, null) as AudioClip;
+                    if (clip == null) continue;
+                    if (library.FindByClip(clip) != null) continue;
+
+                    var track = new MusicTrack(clip.name, clip, true);
+                    foreach (MusicScene scene in ScenesForClip(clip.name, clip.name))
+                    {
+                        track.Scenes.Add(scene);
+                    }
+                    library.AddOfficial(track);
+                    found++;
+                    Plugin.Verbose("从音频源导入官方曲目: " + clip.name);
+                }
+            }
+            catch (Exception e)
+            {
+                Plugin.Verbose("从音频源回收官方音乐失败: " + e.Message);
+            }
+            return found;
         }
 
         private static void AddClip(MusicLibrary library, object clipData, ref int added)
