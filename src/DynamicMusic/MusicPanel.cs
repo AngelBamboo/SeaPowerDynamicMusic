@@ -131,12 +131,15 @@ namespace SeaPowerDynamicMusic
 
         private void OnGUI()
         {
-            if (!_visible) return;
+            if (!_visible)
+            {
+                InputFocusGuard.Release();
+                return;
+            }
 
-            // 注意：这里不要再设 InputFocusGuard.SetTyping(true)。
-            // 诊断显示「按下 是」说明按键读到了，但点击不触发，
-            // 怀疑是 typingActive 让游戏进入文本输入状态后锁住了鼠标。
-            // 自绘控件直接读 Input System，不需要抢输入焦点。
+            // 穿透开启时不抢输入焦点，鼠标留给游戏
+            if (!_mousePassthrough) InputFocusGuard.SetTyping(true);
+            else InputFocusGuard.SetTyping(false);
 
             GUI.depth = -1000;
             UI.EnsureStyles();
@@ -355,7 +358,7 @@ namespace SeaPowerDynamicMusic
                 if (MouseInput.Contains(listRect) && MouseInput.ScrollDelta != 0f)
                 {
                     _trackScroll = Mathf.Clamp(
-                        _trackScroll - MouseInput.ScrollDelta * 60f, 0f, maxScroll);
+                        _trackScroll - MouseInput.ScrollDelta * 200f, 0f, maxScroll);
                 }
 
                 // 滚动条可拖动
@@ -581,34 +584,51 @@ namespace SeaPowerDynamicMusic
             if (UI.Checkbox(pass, _mousePassthrough, "鼠标穿透"))
             {
                 _mousePassthrough = !_mousePassthrough;
+                InputFocusGuard.SetPassthrough(_mousePassthrough);
                 SetStatus(_mousePassthrough
                     ? "已开启鼠标穿透：点击会穿过面板作用于游戏"
                     : "已关闭鼠标穿透：点击只作用于本面板");
             }
 
-            float bw = 74f;
-            float bx = _window.xMax - 12f - bw;
+            // 右侧按钮组。宽度各不相同，统一用「累加宽度 + 间距」向左排，
+            // 之前各处用固定偏移（6/14/20/22）互相打架，导致按钮重叠。
+            float gap = 6f;
+            float bh = 22f;
 
-            if (UI.Click(new Rect(bx, y, bw, 22f), "关闭"))
+            // 关闭
+            float wClose = 62f;
+            if (UI.Click(new Rect(_window.xMax - 12f - wClose, y, wClose, bh), "关闭"))
             {
                 _visible = false;
                 return;
             }
-            bx -= bw + 6f;
 
-            if (UI.Click(new Rect(bx, y, bw + 14f, 22f), "重新扫描"))
+            // 重新扫描
+            float wScan = 88f;
+            float xScan = _window.xMax - 12f - wClose - gap - wScan;
+            if (UI.Click(new Rect(xScan, y, wScan, bh), "重新扫描"))
             {
                 SaveAll(lib, settings);
                 if (host != null) host.RequestRescan();
                 SetStatus("开始重新扫描…");
             }
-            bx -= bw + 20f;
 
-            bx -= bw + 6f;
+            // 暂停 / 继续
+            float wPause = 68f;
+            float xPause = xScan - gap - wPause;
+            if (UI.Click(new Rect(xPause, y, wPause, bh),
+                    player.IsPlaying ? "暂停" : "继续"))
+            {
+                if (player.IsPlaying) player.Pause();
+                else player.UnPause();
+                SetStatus(player.IsPlaying ? "继续播放" : "已暂停");
+            }
 
-            // 原版模式：完全交给游戏，本模组不介入
-            if (UI.Click(new Rect(bx, y, bw + 22f, 22f),
-                    settings.VanillaMode ? "退出原版模式" : "原版模式"))
+            // 原版模式
+            float wVanilla = settings.VanillaMode ? 96f : 78f;
+            float xVanilla = xPause - gap - wVanilla;
+            if (UI.Click(new Rect(xVanilla, y, wVanilla, bh),
+                    settings.VanillaMode ? "退出原版" : "原版模式"))
             {
                 settings.VanillaMode = !settings.VanillaMode;
                 ModConfig.Settings = settings;
@@ -619,10 +639,13 @@ namespace SeaPowerDynamicMusic
                     : "已退出原版模式：由本模组接管播放");
             }
 
-            if (UI.Click(new Rect(bx, y, bw, 22f), "保存"))
+            // 保存
+            float wSave = 62f;
+            float xSave = xVanilla - gap - wSave;
+            if (UI.Click(new Rect(xSave, y, wSave, bh), "保存"))
             {
                 SaveAll(lib, settings);
-                SetStatus("已保存到配置文件");
+                SetStatus("已保存");
             }
 
             if (!string.IsNullOrEmpty(_status) && Time.realtimeSinceStartup < _statusUntil)

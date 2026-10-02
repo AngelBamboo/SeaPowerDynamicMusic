@@ -303,24 +303,50 @@ namespace SeaPowerDynamicMusic
 
         /// <summary>
         /// 取已加载的 bundle 实例。
-        /// AssetBundle.GetAllAssetNames() 不会触发加载，只列出名字，
-        /// 这里用它配合 LoadAllAssets 取出资源。
+        ///
+        /// 关键：游戏自己已经把官方音乐加载过了，存在
+        /// Globals._assetBundleDictionary 里。AssetBundle 全局唯一，
+        /// 我们再 LoadFromFile 必然报「already loaded」并弹错误框。
+        /// 所以必须复用游戏那份实例，一个字节都不重复读。
         /// </summary>
-        private static UnityEngine.AssetBundle GetExistingBundle(string path)
+        private static UnityEngine.AssetBundle GetExistingBundle(string path, string bundleName)
         {
-            if (!_loadedBundles.Contains(path)) return null;
+            // 先查自己的缓存（理论上不会有，保留以防万一）
+            if (_bundleCache.TryGetValue(path, out var cached) && cached != null)
+            {
+                return cached;
+            }
+
+            // 再查游戏的全局缓存，这是主要来源
             try
             {
-                // LoadFromFile 对已加载的 bundle 会返回现有实例或 null，
-                // 这里靠 Unity 内部的 bundle 表拿不到，改用标记 + 直接 LoadAllAssets。
-                // 保守做法：返回 null 让调用方走 LoadAllAssets 分支，
-                // 但那会重复加载，因此这里用一个弱引用缓存实例。
-                return _bundleCache.TryGetValue(path, out var b) ? b : null;
+                var globals = AccessTools.TypeByName("SeaPower.Globals");
+                var field = globals == null ? null : AccessTools.Field(globals, "_assetBundleDictionary");
+                if (field == null) return null;
+
+                var dict = field.GetValue(null) as System.Collections.IDictionary;
+                if (dict == null) return null;
+
+                foreach (System.Collections.DictionaryEntry entry in dict)
+                {
+                    if (entry.Value is not UnityEngine.AssetBundle ab) continue;
+
+                    string key = entry.Key as string ?? "";
+                    // 键可能带也可能不带路径与扩展名，用文件名匹配最稳
+                    if (key.IndexOf(bundleName, StringComparison.OrdinalIgnoreCase) < 0) continue;
+
+                    _bundleCache[path] = ab;
+                    _loadedBundles.Add(path);
+                    Plugin.Verbose("复用游戏已加载的官方音乐包: " + bundleName);
+                    return ab;
+                }
             }
-            catch
+            catch (Exception e)
             {
-                return null;
+                Plugin.Verbose("查询游戏 bundle 缓存失败: " + e.Message);
             }
+
+            return null;
         }
 
         /// <summary>已加载的 bundle 实例缓存，避免二次加载。</summary>
@@ -378,7 +404,7 @@ namespace SeaPowerDynamicMusic
 
                 // 已经加载过就直接复用，绝不再次 LoadFromFile，
                 // 否则 Unity 会弹「已被加载」错误框挡住游戏菜单。
-                UnityEngine.AssetBundle bundle = GetExistingBundle(path);
+                UnityEngine.AssetBundle bundle = GetExistingBundle(path, bundleName);
                 bool fresh = false;
 
                 if (bundle == null)

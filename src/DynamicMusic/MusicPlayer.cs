@@ -146,6 +146,24 @@ namespace SeaPowerDynamicMusic
                 track.PrimaryScene));
         }
 
+        /// <summary>
+        /// 暂停当前播放。保留进度，CrossfadeTo 换曲时会正常淡出，
+        /// 所以暂停期间切场景不会有问题。
+        /// </summary>
+        public void Pause()
+        {
+            if (_active == null || !_active.isPlaying) return;
+            _active.Pause();
+        }
+
+        /// <summary>从暂停处继续播放。</summary>
+        public void UnPause()
+        {
+            if (_active == null) return;
+            if (_active.isPlaying) return;
+            _active.UnPause();
+        }
+
         /// <summary>淡出并停止。fade 为 0 时立即停止。</summary>
         public void Stop(float fade)
         {

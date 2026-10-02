@@ -71,6 +71,35 @@ namespace SeaPowerDynamicMusic
             }
         }
 
+        /// <summary>
+        /// 鼠标穿透开关。
+        ///
+        /// 开启后点击会穿过面板作用于游戏（例如拖动地图旋转视角）。
+        /// 实现方式是置 typingActive=false，让游戏的 InputHandler 重新处理鼠标。
+        /// </summary>
+        internal static void SetPassthrough(bool passthrough)
+        {
+            _passthrough = passthrough;
+            if (passthrough)
+            {
+                // 立刻放权，地图等界面马上能响应鼠标
+                SetTyping(false);
+            }
+            else
+            {
+                // 收回焦点，防止误操作游戏
+                if (_holding) SetTyping(false);
+            }
+        }
+
+        private static bool _passthrough;
+
+        /// <summary>当前是否处于鼠标穿透状态。</summary>
+        internal static bool Passthrough
+        {
+            get { return _passthrough; }
+        }
+
         /// <summary>模组卸载或宿主销毁时确保还原。</summary>
         internal static void Release()
         {
