@@ -604,6 +604,21 @@ namespace SeaPowerDynamicMusic
             }
             bx -= bw + 20f;
 
+            bx -= bw + 6f;
+
+            // 原版模式：完全交给游戏，本模组不介入
+            if (UI.Click(new Rect(bx, y, bw + 22f, 22f),
+                    settings.VanillaMode ? "退出原版模式" : "原版模式"))
+            {
+                settings.VanillaMode = !settings.VanillaMode;
+                ModConfig.Settings = settings;
+                if (host != null) host.ApplyPlaybackMode();
+                ModConfig.SaveUserConfig();
+                SetStatus(settings.VanillaMode
+                    ? "已切到原版模式：由游戏按原本逻辑播放官方音乐"
+                    : "已退出原版模式：由本模组接管播放");
+            }
+
             if (UI.Click(new Rect(bx, y, bw, 22f), "保存"))
             {
                 SaveAll(lib, settings);

@@ -675,5 +675,12 @@ namespace SeaPowerDynamicMusic
 
         /// <summary>是否把游戏自带音乐也纳入调度。关闭则只用用户自己的音乐。</summary>
         public bool IncludeOfficial = true;
+
+        /// <summary>
+        /// 原版模式。开启后本模组完全让位：
+        /// 不播放任何自定义音乐，也不再拦截游戏原生音乐，
+        /// 由游戏按它原本的逻辑播放官方音乐。
+        /// </summary>
+        public bool VanillaMode = false;
     }
 }

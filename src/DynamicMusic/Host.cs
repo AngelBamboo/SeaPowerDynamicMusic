@@ -79,13 +79,10 @@ namespace SeaPowerDynamicMusic
                 _panel = MusicPanel.Create(transform);
             }
 
-            // 是否压制游戏原生音乐，由 VanillaMusicBlock 的补丁读取
-            BlockVanilla = Settings.ReplaceVanilla;
-            Plugin.LogInfo(BlockVanilla
-                ? "已接管音乐播放，游戏原生音乐将被拦截。"
-                : "未接管，游戏原生音乐与自定义音乐会同时播放。");
-
+            // 先 Begin 再应用模式：原版模式下 Begin 起的播会被 Suspend 立即停掉，
+            // 顺序反了 Suspend 会在 _started 还是 false 时空转，Begin 照样会播。
             Director.Begin();
+            ApplyPlaybackMode();
 
             Plugin.LogInfo(string.Format("就绪。共加载 {0} 首曲目。", Library.LoadedCount));
             if (_panel != null)
@@ -199,5 +196,33 @@ namespace SeaPowerDynamicMusic
         /// 压制由 VanillaMusicBlock 的 Harmony 补丁完成，这里只保留开关。
         /// </summary>
         internal bool BlockVanilla = true;
+
+        /// <summary>
+        /// 应用当前播放模式。
+        ///
+        /// 原版模式：不拦截游戏音乐、不播放任何自定义曲目，
+        /// 游戏按它原本的逻辑播放官方音乐。
+        /// 非原版模式：由本模组接管，拦截游戏起播以免两路叠加。
+        /// </summary>
+        internal void ApplyPlaybackMode()
+        {
+            bool vanilla = Settings != null && Settings.VanillaMode;
+
+            // 原版模式下必须解除拦截，否则游戏自己也不会出声
+            BlockVanilla = !vanilla && Settings.ReplaceVanilla;
+
+            if (vanilla)
+            {
+                if (Director != null) Director.Suspend();
+                Plugin.LogInfo("已切换到原版模式：由游戏按原本逻辑播放官方音乐。");
+            }
+            else
+            {
+                if (Director != null) Director.Resume();
+                Plugin.LogInfo(BlockVanilla
+                    ? "已接管音乐播放，游戏原生音乐将被拦截。"
+                    : "未接管，游戏原生音乐与自定义音乐会同时播放。");
+            }
+        }
     }
 }

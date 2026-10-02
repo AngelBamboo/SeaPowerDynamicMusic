@@ -66,6 +66,7 @@ namespace SeaPowerDynamicMusic
             s.SceneSwitchCooldown = Mathf.Max(0f,
                 userConfig.GetFloat("Timing", "SceneSwitchCooldown", 15.0f));
             s.IncludeOfficial = userConfig.GetBool("Audio", "IncludeOfficialMusic", true);
+            s.VanillaMode = userConfig.GetBool("General", "VanillaMode", false);
             Settings = s;
         }
 
@@ -96,6 +97,8 @@ namespace SeaPowerDynamicMusic
             sb.AppendLine("Enabled=true");
             sb.AppendLine("# 音乐库文件夹。相对路径以游戏根目录为基准，也可以填绝对路径。");
             sb.AppendLine("LibraryPath=MusicLibrary");
+            sb.AppendLine("# 原版模式。true 时本模组完全不介入，由游戏按原本逻辑播放官方音乐。");
+            sb.AppendLine("VanillaMode=false");
             sb.AppendLine("# 输出详细日志，排查问题时打开。");
             sb.AppendLine("VerboseLog=false");
             sb.AppendLine();
@@ -154,6 +157,7 @@ namespace SeaPowerDynamicMusic
                 ini.Set("Audio", "Shuffle", Settings.Shuffle ? "true" : "false");
                 ini.Set("Audio", "ReplaceVanillaMusic", Settings.ReplaceVanilla ? "true" : "false");
                 ini.Set("Audio", "IncludeOfficialMusic", Settings.IncludeOfficial ? "true" : "false");
+                ini.Set("General", "VanillaMode", Settings.VanillaMode ? "true" : "false");
                 ini.Set("Panel", "Enabled", PanelEnabled ? "true" : "false");
                 ini.Set("Panel", "Hotkey", PanelKey);
 

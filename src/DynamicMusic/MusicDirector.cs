@@ -317,6 +317,33 @@ namespace SeaPowerDynamicMusic
             _lastSwitchTime = Time.unscaledTime;
         }
 
+        /// <summary>
+        /// 暂停自定义播放并淡出当前曲目。用于切换到原版模式。
+        /// 只停自己这路音频，不动游戏的 MusicManager。
+        /// </summary>
+        public void Suspend()
+        {
+            if (!_started) return;
+            _started = false;
+            if (_player != null) _player.Stop(Mathf.Max(0.2f, _settings.FadeSeconds));
+            Plugin.LogInfo("已停止自定义音乐播放。");
+        }
+
+        /// <summary>从原版模式恢复，重新接管播放。</summary>
+        public void Resume()
+        {
+            if (_started) return;
+            _started = true;
+            _lastSwitchTime = Time.unscaledTime;
+
+            // 立刻按当前场景起播，不等冷却
+            MusicScene want = _sceneOverride.HasValue
+                ? ResolveWithFallback(_sceneOverride.Value)
+                : MusicScene.Cruise;
+            SwitchTo(want);
+            Plugin.LogInfo("已恢复自定义音乐播放。");
+        }
+
         /// <summary>直接播放指定曲目（界面里点选试听）。</summary>
         public void PlayTrack(MusicTrack track)
         {
