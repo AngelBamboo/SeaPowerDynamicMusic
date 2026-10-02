@@ -1,5 +1,4 @@
 using System;
-using System.Collections.Generic;
 using UnityEngine;
 
 namespace SeaPowerDynamicMusic
@@ -7,45 +6,33 @@ namespace SeaPowerDynamicMusic
     /// <summary>
     /// 游戏内音乐管理面板。
     ///
-    /// 用 IMGUI 绘制，不依赖游戏的 Noesis 界面框架，
-    /// 好处是游戏更新界面资源时不会失效，代价是外观和原生界面略有差异。
-    /// 默认按 F8 呼出，可在 BepInEx 配置里改键或关闭。
+    /// 全部用 UI 自绘控件实现，不用 GUILayout 的交互控件。
+    /// 原因是游戏的输入走 Input System Package，而 GUILayout 的
+    /// Button / Slider 依赖 IMGUI 事件流，两者不通，
+    /// 结果是面板画得出来但收不到任何点击。
+    ///
+    /// 布局仍借助 GUILayout 取得矩形，但每个元素的点击与拖动
+    /// 都由 MouseInput 直接处理。
+    ///
+    /// 左侧三级：一级大类、二级场景、三级曲目。
+    /// 默认按 F8 呼出。
     /// </summary>
     public class MusicPanel : MonoBehaviour
     {
         private bool _visible;
-        private Rect _window = new Rect(100f, 80f, 940f, 520f);
-        private Vector2 _groupScroll;
-        private Vector2 _sceneScroll;
-        private Vector2 _trackScroll;
+        private float _trackScroll;
         private SceneGroup _group = SceneGroup.Mission;
         private MusicScene _scene = MusicScene.Cruise;
         private string _status = "";
         private float _statusUntil;
         private string _filter = "";
 
-        // 界面资源，首次绘制时创建
-        private bool _stylesReady;
-        private GUIStyle _windowStyle;
-        private GUIStyle _titleStyle;
-        private GUIStyle _labelStyle;
-        private GUIStyle _dimStyle;
-        private GUIStyle _rowStyle;
-        private GUIStyle _rowActiveStyle;
-        private GUIStyle _sceneRowStyle;
-        private GUIStyle _sceneRowActiveStyle;
-        private GUIStyle _buttonStyle;
-        private GUIStyle _badgeStyle;
-        private GUIStyle _chipStyle;
-        private Texture2D _texPanel;
-        private Texture2D _texRow;
-        private Texture2D _texRowAlt;
-        private Texture2D _texRowActive;
-        private Texture2D _texScenRowActive;
-        private Texture2D _texAccent;
-        private Texture2D _texButton;
+        /// <summary>窗口矩形，拖动时改动。</summary>
+        private Rect _window = new Rect(110f, 90f, 940f, 520f);
 
-        private const float SceneColumnWidth = 168f;
+        /// <summary>拖动窗口用的状态。</summary>
+        private bool _draggingWindow;
+        private Vector2 _dragOffset;
 
         public static MusicPanel Create(Transform parent)
         {
@@ -57,14 +44,11 @@ namespace SeaPowerDynamicMusic
 
         private void Update()
         {
-            if (HotkeyPressed())
-            {
-                _visible = !_visible;
-            }
+            if (HotkeyPressed()) _visible = !_visible;
         }
 
         /// <summary>
-        /// 同时兼容新旧两套输入系统：游戏若启用 Input System 包，
+        /// 兼容新旧两套输入系统：游戏若只启用 Input System，
         /// 旧的 UnityEngine.Input 会抛异常，因此两边都试。
         /// </summary>
         private static bool HotkeyPressed()
@@ -73,7 +57,6 @@ namespace SeaPowerDynamicMusic
 
             string keyName = ModConfig.PanelKey;
 
-            // 新输入系统
             try
             {
                 var kb = UnityEngine.InputSystem.Keyboard.current;
@@ -86,24 +69,14 @@ namespace SeaPowerDynamicMusic
                     if (keyName == "Home" && kb.homeKey.wasPressedThisFrame) return true;
                 }
             }
-            catch
-            {
-                // 项目未启用新输入系统时会走到这里，忽略即可
-            }
+            catch { }
 
-            // 旧输入系统
             try
             {
                 KeyCode kc;
-                if (Enum.TryParse(keyName, out kc))
-                {
-                    return Input.GetKeyDown(kc);
-                }
+                if (Enum.TryParse(keyName, out kc)) return Input.GetKeyDown(kc);
             }
-            catch
-            {
-                // 项目只启用新输入系统时走到这里
-            }
+            catch { }
 
             return false;
         }
@@ -112,236 +85,193 @@ namespace SeaPowerDynamicMusic
         {
             if (!_visible) return;
 
-            // 游戏的输入系统会主动吞掉鼠标事件，IMGUI 收不到。
-            // 面板显示时把自己伪装成「正在输入文本」，
-            // 游戏 InputHandler.typingActive 为真时就不处理鼠标，
-            // 这样点击才会落到面板上而不是穿透到游戏界面。
-            InputFocusGuard.SetTyping(_visible);
+            // 面板显示时接管输入焦点，让游戏别抢鼠标
+            InputFocusGuard.SetTyping(true);
 
-            // depth 越小越靠上层，必须压过游戏自己的 IMGUI
             GUI.depth = -1000;
+            UI.EnsureStyles();
+            MouseInput.BeginFrame();
+            UI.BeginFrame();
 
-            // 面板外点击不处理，也不关闭，避免误触
-            var current = Event.current;
-            if (current != null && current.type == EventType.MouseDown
-                && !_window.Contains(current.mousePosition))
-            {
-                return;
-            }
+            // 拖动窗口：按住标题栏即可移动
+            HandleWindowDrag();
+            if (_draggingWindow) return;
 
-            EnsureStyles();
-            _window = GUILayout.Window(0x5EA10, _window, DrawWindow,
-                "动态音乐  Dynamic Music", _windowStyle);
-
-            // 窗口处理完之后才吃掉事件，阻止它继续传给游戏界面。
-            // 顺序不能颠倒，提前 Use 会让控件收不到事件。
-            var e = Event.current;
-            if (e != null && e.isMouse) e.Use();
-        }
-
-        private void DrawWindow(int id)
-        {
             var lib = Plugin.Instance != null ? Plugin.Instance.Library : null;
             var director = Plugin.Instance != null ? Plugin.Instance.Director : null;
             var player = Plugin.Instance != null ? Plugin.Instance.Player : null;
             var settings = Plugin.Instance != null ? Plugin.Instance.Settings : null;
 
+            UI.Fill(_window, UI.Panel);
+            DrawTitleBar();
+
             if (lib == null || director == null || player == null || settings == null)
             {
-                GUILayout.Label("插件尚未初始化完成，请稍候…", _labelStyle);
-                GUI.DragWindow(new Rect(0, 0, 10000, 24));
+                UI.Label(new Rect(_window.x + 14f, _window.y + 44f,
+                    _window.width - 28f, 24f), "插件尚未初始化完成，请稍候…", false, true);
                 return;
             }
 
-            // ---------- 状态栏 ----------
-            GUILayout.BeginHorizontal(_rowStyle);
+            float top = _window.y + 42f;
+            float bottom = _window.yMax - 52f;
+            float height = bottom - top;
 
-            string nowPlaying = player.CurrentTrack != null
-                ? player.CurrentTrack.DisplayName
-                : "（无）";
-            GUILayout.Label("正在播放", _dimStyle, GUILayout.Width(60));
-            GUILayout.Label(nowPlaying, _titleStyle, GUILayout.Width(230));
-            GUILayout.Label("场景", _dimStyle, GUILayout.Width(36));
-            GUILayout.Label(SceneInfo.SceneName(director.CurrentScene), _labelStyle,
-                GUILayout.Width(70));
-            GUILayout.FlexibleSpace();
-            GUILayout.Label(string.Format("用户 {0} 首 / 官方 {1} 首",
-                lib.UserTrackCount, lib.AllTracks.Count - lib.UserTrackCount), _dimStyle);
-            GUILayout.EndHorizontal();
+            float colGroup = 92f;
+            float colScene = 118f;
+            float gap = 8f;
 
-            GUILayout.Space(6);
+            float x = _window.x + 12f;
+            DrawGroupColumn(lib, new Rect(x, top, colGroup, height));
+            x += colGroup + gap;
+            DrawSceneColumn(lib, new Rect(x, top, colScene, height));
+            x += colScene + gap;
+            DrawTrackColumn(lib, director, player,
+                new Rect(x, top, _window.xMax - 12f - x, height));
 
-            // ---------- 主体：一级分组 | 二级场景 | 三级曲目 ----------
-            GUILayout.BeginHorizontal();
-
-            DrawGroupColumn(lib);
-            GUILayout.Space(6);
-            DrawSceneColumn(lib);
-            GUILayout.Space(6);
-            DrawTrackColumn(lib, director, player, settings);
-
-            GUILayout.EndHorizontal();
-
-            GUILayout.Space(6);
-
-            // ---------- 底部：设置与操作 ----------
-            GUILayout.BeginHorizontal(_rowStyle);
-
-            GUILayout.Label("音量", _dimStyle, GUILayout.Width(34));
-            float vol = GUILayout.HorizontalSlider(settings.Volume, 0f, 1f,
-                GUILayout.Width(130));
-            if (Mathf.Abs(vol - settings.Volume) > 0.001f)
-            {
-                settings.Volume = vol;
-                player.SetVolume(vol);
-                ModConfig.Settings = settings;
-                ModConfig.SaveUserConfig();
-            }
-            GUILayout.Label(Mathf.RoundToInt(settings.Volume * 100) + "%",
-                _dimStyle, GUILayout.Width(38));
-
-            GUILayout.Space(10);
-
-            bool shuffle = GUILayout.Toggle(settings.Shuffle, " 随机");
-            if (shuffle != settings.Shuffle)
-            {
-                settings.Shuffle = shuffle;
-                ModConfig.Settings = settings;
-                ModConfig.SaveUserConfig();
-            }
-
-            bool official = GUILayout.Toggle(settings.IncludeOfficial, " 含官方音乐");
-            if (official != settings.IncludeOfficial)
-            {
-                settings.IncludeOfficial = official;
-                ModConfig.Settings = settings;
-                ModConfig.SaveUserConfig();
-            }
-
-            GUILayout.FlexibleSpace();
-
-            if (GUILayout.Button("保存", _buttonStyle, GUILayout.Width(60)))
-            {
-                SaveAll(lib, settings);
-                SetStatus("已保存到配置文件");
-            }
-
-            if (GUILayout.Button("重新扫描", _buttonStyle, GUILayout.Width(80)))
-            {
-                SaveAll(lib, settings);
-                Plugin.Instance.RequestRescan();
-                SetStatus("开始重新扫描…");
-            }
-
-            if (GUILayout.Button(_visible ? "关闭 (F8)" : "关闭", _buttonStyle,
-                    GUILayout.Width(84)))
-            {
-                _visible = false;
-            }
-
-            GUILayout.EndHorizontal();
-
-            // 状态提示
-            if (!string.IsNullOrEmpty(_status) && Time.realtimeSinceStartup < _statusUntil)
-            {
-                GUILayout.Label(_status, _dimStyle);
-            }
-            else
-            {
-                GUILayout.Label(string.Format(
-                    "快捷键 {0} 开关本面板；把音乐放进 {1} 即可被识别。权重 0 表示不参与随机，优先级数字越大越优先。",
-                    ModConfig.PanelKey, ModConfig.LibraryRoot), _dimStyle);
-            }
-
-            GUI.DragWindow(new Rect(0, 0, 10000, 22));
+            DrawFooter(settings, player);
         }
 
-        /// <summary>一级菜单：大类分组。</summary>
-        private void DrawGroupColumn(MusicLibrary lib)
+        private void DrawTitleBar()
         {
-            GUILayout.BeginVertical(GUILayout.Width(96));
-            GUILayout.Label("分类", _dimStyle);
-            _groupScroll = GUILayout.BeginScrollView(_groupScroll, false, false,
-                GUILayout.Height(300));
+            var r = new Rect(_window.x + 1f, _window.y + 1f, _window.width - 2f, 26f);
+            UI.Label(r, "动态音乐  Dynamic Music", true, false, false, TextAnchor.MiddleCenter);
+        }
 
+        private void HandleWindowDrag()
+        {
+            var bar = new Rect(_window.x + 1f, _window.y + 1f, _window.width - 2f, 26f);
+
+            if (MouseInput.Pressed && MouseInput.Contains(bar))
+            {
+                _draggingWindow = true;
+                _dragOffset = MouseInput.Position - new Vector2(_window.x, _window.y);
+            }
+
+            if (_draggingWindow)
+            {
+                if (MouseInput.Held)
+                {
+                    Vector2 p = MouseInput.Position - _dragOffset;
+                    // 限制在屏幕内，避免窗口被拖丢
+                    p.x = Mathf.Clamp(p.x, 0f, Screen.width - 60f);
+                    p.y = Mathf.Clamp(p.y, 0f, Screen.height - 40f);
+                    _window.position = p;
+                }
+                else
+                {
+                    _draggingWindow = false;
+                }
+            }
+        }
+
+        // ------------------------------------------------------------------
+        // 一级：大类
+        // ------------------------------------------------------------------
+
+        private void DrawGroupColumn(MusicLibrary lib, Rect area)
+        {
+            UI.Label(new Rect(area.x, area.y, area.width, 18f), "分类");
+
+            float y = area.y + 20f;
             foreach (SceneGroup g in new[] { SceneGroup.Interface, SceneGroup.Mission,
                                             SceneGroup.Result })
             {
                 int n = 0;
-                foreach (MusicScene s in SceneInfo.ScenesIn(g))
-                {
-                    n += lib.GetTracks(s).Count;
-                }
+                foreach (MusicScene s in SceneInfo.ScenesIn(g)) n += lib.GetTracks(s).Count;
 
-                bool active = g == _group;
-                GUILayout.BeginHorizontal(active ? _rowActiveStyle : _rowStyle);
-                if (GUILayout.Button(SceneInfo.GroupName(g),
-                        active ? _rowActiveStyle : _sceneRowStyle,
-                        GUILayout.Width(58), GUILayout.Height(26)))
+                var r = new Rect(area.x, y, area.width - 30f, 26f);
+                if (g == _group) UI.Fill(r, UI.RowActive);
+
+                if (UI.Click(r, SceneInfo.GroupName(g)))
                 {
                     _group = g;
                     _scene = SceneInfo.ScenesIn(g)[0];
-                    _trackScroll = Vector2.zero;
+                    _trackScroll = 0f;
                 }
-                GUILayout.FlexibleSpace();
-                GUILayout.Label(n.ToString(), _dimStyle, GUILayout.Width(22));
-                GUILayout.EndHorizontal();
-            }
 
-            GUILayout.EndScrollView();
-            GUILayout.EndVertical();
+                UI.Label(new Rect(area.xMax - 28f, y, 26f, 26f), n.ToString(),
+                    false, true, false, TextAnchor.MiddleRight);
+                y += 28f;
+            }
         }
 
-        /// <summary>二级菜单：该分组下的具体场景。</summary>
-        private void DrawSceneColumn(MusicLibrary lib)
-        {
-            GUILayout.BeginVertical(GUILayout.Width(150));
-            GUILayout.Label("场景", _dimStyle);
-            _sceneScroll = GUILayout.BeginScrollView(_sceneScroll, false, false,
-                GUILayout.Height(300));
+        // ------------------------------------------------------------------
+        // 二级：场景
+        // ------------------------------------------------------------------
 
+        private void DrawSceneColumn(MusicLibrary lib, Rect area)
+        {
+            UI.Label(new Rect(area.x, area.y, area.width, 18f), "场景");
+
+            float y = area.y + 20f;
             foreach (MusicScene s in SceneInfo.ScenesIn(_group))
             {
                 int n = lib.GetTracks(s).Count;
-                bool active = s == _scene;
+                var r = new Rect(area.x, y, area.width - 30f, 26f);
+                if (s == _scene) UI.Fill(r, UI.RowActive);
 
-                GUILayout.BeginHorizontal(active ? _rowActiveStyle : _rowStyle);
-                if (GUILayout.Button(SceneInfo.SceneName(s),
-                        active ? _rowActiveStyle : _sceneRowStyle,
-                        GUILayout.Width(104), GUILayout.Height(26)))
+                if (UI.Click(r, SceneInfo.SceneName(s)))
                 {
                     _scene = s;
-                    _trackScroll = Vector2.zero;
+                    _trackScroll = 0f;
                 }
-                GUILayout.FlexibleSpace();
-                GUILayout.Label(n.ToString(), _dimStyle, GUILayout.Width(22));
-                GUILayout.EndHorizontal();
-            }
 
-            GUILayout.EndScrollView();
-            GUILayout.EndVertical();
+                UI.Label(new Rect(area.xMax - 28f, y, 26f, 26f), n.ToString(),
+                    false, true, false, TextAnchor.MiddleRight);
+                y += 28f;
+            }
         }
 
-        /// <summary>
-        /// 三级菜单：曲目列表。每行可试听、开关、调整权重与优先级。
-        /// 一首曲子可以同时属于多个分类，这里列出它归属的全部分类。
-        /// </summary>
+        // ------------------------------------------------------------------
+        // 三级：曲目
+        // ------------------------------------------------------------------
+
         private void DrawTrackColumn(MusicLibrary lib, MusicDirector director,
-            MusicPlayer player, MusicSettings settings)
+            MusicPlayer player, Rect area)
         {
-            GUILayout.BeginVertical();
-
-            GUILayout.BeginHorizontal();
-            GUILayout.Label(SceneInfo.SceneName(_scene) + "  曲目", _headerStyleSmall());
-            GUILayout.FlexibleSpace();
-            GUILayout.Label("筛选", _dimStyle, GUILayout.Width(30));
-            _filter = GUILayout.TextField(_filter ?? "", GUILayout.Width(120));
-            if (GUILayout.Button("清空", _buttonStyle, GUILayout.Width(44))) _filter = "";
-            GUILayout.EndHorizontal();
-
             var tracks = lib.GetTracks(_scene);
-            _trackScroll = GUILayout.BeginScrollView(_trackScroll, false, false,
-                GUILayout.Height(276));
+
+            UI.Label(new Rect(area.x, area.y, 200f, 20f),
+                SceneInfo.SceneName(_scene) + "  曲目", true);
+
+            // 筛选框：自己画，不依赖 IMGUI 的 TextField
+            var boxW = 130f;
+            var box = new Rect(area.xMax - boxW - 58f, area.y, boxW, 20f);
+            UI.Fill(box, new Color(0f, 0f, 0f, 0.4f));
+            UI.Label(box, string.IsNullOrEmpty(_filter) ? "筛选" : _filter,
+                false, string.IsNullOrEmpty(_filter));
+
+            if (UI.Click(new Rect(area.xMax - 54f, area.y, 54f, 20f), "清空"))
+            {
+                _filter = "";
+            }
+
+            float listY = area.y + 24f;
+            float listH = area.height - 24f;
+            var listRect = new Rect(area.x, listY, area.width - 8f, listH);
+            UI.Fill(listRect, new Color(0f, 0f, 0f, 0.15f));
+
+            // 滚动
+            float rowH = 54f;
+            float contentH = tracks.Count * rowH;
+            if (contentH > listH)
+            {
+                if (MouseInput.Contains(listRect))
+                {
+                    _trackScroll = Mathf.Clamp(_trackScroll + MouseInput.ScrollDelta * 30f,
+                        0f, contentH - listH);
+                }
+
+                var bar = new Rect(area.xMax - 6f, listY, 5f, listH);
+                UI.Fill(bar, new Color(1f, 1f, 1f, 0.08f));
+                float barH = listH * (listH / contentH);
+                float barY = listY + (listH - barH) * (_trackScroll / (contentH - listH));
+                UI.Fill(new Rect(bar.x, barY, bar.width, barH), UI.Accent);
+            }
+            else
+            {
+                _trackScroll = 0f;
+            }
 
             int shown = 0;
             for (int i = 0; i < tracks.Count; i++)
@@ -353,42 +283,44 @@ namespace SeaPowerDynamicMusic
                     continue;
                 }
                 shown++;
-                DrawTrackRow(t, director, player);
+
+                float rowY = listY + i * rowH - _trackScroll;
+                if (rowY + rowH < listY || rowY > area.yMax) continue;   // 裁掉不可见行
+
+                DrawTrackRow(t, director, player,
+                    new Rect(area.x + 2f, rowY, listRect.width - 4f, rowH - 2f));
             }
 
             if (shown == 0)
             {
-                GUILayout.Space(8);
-                GUILayout.Label(tracks.Count == 0
-                    ? "这个场景下还没有曲目。"
-                    : "没有匹配的曲目。", _dimStyle);
+                UI.Label(new Rect(area.x + 8f, listY + 8f, area.width - 16f, 20f),
+                    tracks.Count == 0 ? "这个场景下还没有曲目。" : "没有匹配的曲目。",
+                    false, true);
                 if (tracks.Count == 0)
                 {
-                    GUILayout.Label("放音乐：" + ModConfig.LibraryRoot + "\\" + _scene + "\\",
-                        _dimStyle);
-                    GUILayout.Label("或从别的分类勾选过来。", _dimStyle);
+                    UI.Label(new Rect(area.x + 8f, listY + 30f, area.width - 16f, 20f),
+                        "放音乐：" + ModConfig.LibraryRoot + "\\" + _scene + "\\", false, true);
+                    UI.Label(new Rect(area.x + 8f, listY + 50f, area.width - 16f, 20f),
+                        "或从别的分类勾选过来。", false, true);
                 }
             }
-
-            GUILayout.EndScrollView();
-            GUILayout.EndVertical();
         }
 
-        private void DrawTrackRow(MusicTrack t, MusicDirector director, MusicPlayer player)
+        private void DrawTrackRow(MusicTrack t, MusicDirector director,
+            MusicPlayer player, Rect r)
         {
             bool isCurrent = player.CurrentTrack == t;
-            GUILayout.BeginHorizontal(isCurrent ? _rowActiveStyle : _rowStyle);
+            UI.Fill(r, isCurrent ? UI.RowActive : UI.Row);
+
+            float y = r.y + 2f;
+            float x = r.x + 4f;
 
             // 试听
-            string label = t.DisplayName;
-            if (t.Official) label = "[官方] " + label;
+            string label = (t.Official ? "[官方] " : "") + t.DisplayName;
             if (isCurrent) label = "▶ " + label;
 
-            Color oldColor = GUI.color;
-            if (t.Excluded) GUI.color = new Color(0.55f, 0.55f, 0.55f);
-
-            if (GUILayout.Button(label, isCurrent ? _rowActiveStyle : _rowStyle,
-                    GUILayout.Height(24), GUILayout.Width(196)))
+            var playBtn = new Rect(x, y, 250f, 22f);
+            if (UI.Click(playBtn, label, t.IsLoaded))
             {
                 if (t.IsLoaded)
                 {
@@ -402,70 +334,152 @@ namespace SeaPowerDynamicMusic
                 }
             }
 
-            // 开关：是否参与播放
+            // 启用开关
+            var toggle = new Rect(x + 256f, y, 20f, 22f);
             bool on = !t.Excluded && t.Weight > 0f;
-            bool newOn = GUILayout.Toggle(on, "", GUILayout.Width(20), GUILayout.Height(24));
-            if (newOn != on)
+            if (MouseInput.Contains(toggle) && MouseInput.Released)
             {
-                t.Excluded = !newOn;
-                t.Weight = newOn ? Mathf.Max(t.Weight, 0.1f) : 0f;
-                SetStatus((newOn ? "已启用 " : "已停用 ") + t.DisplayName);
+                on = !on;
+                t.Excluded = !on;
+                t.Weight = on ? Mathf.Max(t.Weight, 0.1f) : 0f;
+                SetStatus((on ? "已启用 " : "已停用 ") + t.DisplayName);
             }
+            UI.Label(toggle, on ? "☑" : "☐", false, !on, false, TextAnchor.MiddleCenter);
 
             // 权重
-            GUILayout.Label("权重", _dimStyle, GUILayout.Width(28));
-            float w = GUILayout.HorizontalSlider(t.Weight, 0f, 3f, GUILayout.Width(64));
-            if (Mathf.Abs(w - t.Weight) > 0.01f) t.Weight = w;
+            UI.Label(new Rect(x + 280f, y, 28f, 22f), "权重", false, true);
+            var wSlider = new Rect(x + 308f, y + 6f, 68f, 10f);
+            if (UI.Slider(wSlider, t.Weight, 0f, 3f))
+            {
+                t.Weight = UI.ValueFromDrag(wSlider, 0f, 3f);
+            }
+            UI.Label(new Rect(x + 380f, y, 30f, 22f), t.Weight.ToString("0.0"), false, true);
 
             // 优先级
-            GUILayout.Label("优先", _dimStyle, GUILayout.Width(28));
-            int pr = Mathf.Clamp(
-                Mathf.RoundToInt(GUILayout.HorizontalSlider(t.Priority, 0f, 5f,
-                    GUILayout.Width(56))), 0, 5);
-            if (pr != t.Priority) t.Priority = pr;
+            UI.Label(new Rect(x + 414f, y, 28f, 22f), "优先", false, true);
+            var pSlider = new Rect(x + 442f, y + 6f, 58f, 10f);
+            if (UI.Slider(pSlider, t.Priority, 0f, 5f))
+            {
+                t.Priority = Mathf.RoundToInt(UI.ValueFromDrag(pSlider, 0f, 5f));
+            }
+            UI.Label(new Rect(x + 504f, y, 20f, 22f), t.Priority.ToString(), false, true);
 
-            // 时长或状态
-            if (t.IsLoaded) GUILayout.Label(FormatDuration(t.Duration), _dimStyle,
-                GUILayout.Width(40));
-            else if (t.LoadFailed) GUILayout.Label("失败", _badgeStyle, GUILayout.Width(40));
-            else GUILayout.Label("待载", _dimStyle, GUILayout.Width(40));
+            // 时长
+            if (t.IsLoaded)
+                UI.Label(new Rect(x + 528f, y, 44f, 22f), FormatDuration(t.Duration), false, true);
+            else if (t.LoadFailed)
+                UI.Label(new Rect(x + 528f, y, 44f, 22f), "失败", false, false, true);
+            else
+                UI.Label(new Rect(x + 528f, y, 44f, 22f), "待载", false, true);
 
-            GUI.color = oldColor;
-            GUILayout.EndHorizontal();
-
-            // 归属分类：可勾选，让一首曲子出现在多个场景
-            DrawSceneToggles(t);
+            DrawSceneToggles(t, new Rect(r.x + 4f, r.y + 26f, r.width - 8f, 20f));
         }
 
-        /// <summary>曲目归属的分类勾选行。改动会立刻重建索引并写回配置。</summary>
-        private void DrawSceneToggles(MusicTrack t)
+        /// <summary>归属分类勾选行。一首曲子可同时属于多个场景。</summary>
+        private void DrawSceneToggles(MusicTrack t, Rect r)
         {
-            GUILayout.BeginHorizontal();
-            GUILayout.Label("归属", _dimStyle, GUILayout.Width(28));
-            GUILayout.BeginHorizontal();
+            UI.Label(new Rect(r.x, r.y, 28f, r.height), "归属", false, true);
+
+            float x = r.x + 30f;
+            const float w = 56f;
+            const float gap = 2f;
 
             bool changed = false;
             foreach (MusicScene s in Enum.GetValues(typeof(MusicScene)))
             {
-                bool has = t.Scenes.Contains(s);
-                bool now = GUILayout.Toggle(has, SceneInfo.SceneName(s), _chipStyle,
-                    GUILayout.Width(58), GUILayout.Height(18));
-                if (now != has)
+                var box = new Rect(x, r.y, w, r.height);
+                if (UI.Checkbox(box, t.Scenes.Contains(s), SceneInfo.SceneName(s)))
                 {
-                    if (now) t.Scenes.Add(s); else t.Scenes.Remove(s);
+                    if (t.Scenes.Contains(s)) t.Scenes.Remove(s);
+                    else t.Scenes.Add(s);
                     changed = true;
                 }
+                x += w + gap;
             }
-
-            GUILayout.EndHorizontal();
-            GUILayout.FlexibleSpace();
-            GUILayout.EndHorizontal();
 
             if (changed)
             {
                 var lib = Plugin.Instance.Library;
                 if (lib != null) lib.RebuildIndex();
                 MusicDirector.WriteTrackSettingsToFile();
+            }
+        }
+
+        // ------------------------------------------------------------------
+        // 底部
+        // ------------------------------------------------------------------
+
+        private void DrawFooter(MusicSettings settings, MusicPlayer player)
+        {
+            var host = Plugin.Instance;
+            var lib = host != null ? host.Library : null;
+
+            float y = _window.yMax - 46f;
+            UI.Fill(new Rect(_window.x + 1f, y - 4f, _window.width - 2f, 42f),
+                new Color(1f, 1f, 1f, 0.03f));
+
+            float x = _window.x + 12f;
+
+            UI.Label(new Rect(x, y, 28f, 20f), "音量", false, true);
+            var vol = new Rect(x + 30f, y + 6f, 110f, 10f);
+            if (UI.Slider(vol, settings.Volume, 0f, 1f))
+            {
+                settings.Volume = UI.ValueFromDrag(vol, 0f, 1f);
+                player.SetVolume(settings.Volume);
+            }
+            UI.Label(new Rect(x + 144f, y, 34f, 20f),
+                Mathf.RoundToInt(settings.Volume * 100) + "%", false, true);
+            x += 186f;
+
+            if (UI.Checkbox(new Rect(x, y, 52f, 20f), settings.Shuffle, "随机"))
+            {
+                settings.Shuffle = !settings.Shuffle;
+                ModConfig.Settings = settings;
+                ModConfig.SaveUserConfig();
+            }
+            x += 60f;
+
+            if (UI.Checkbox(new Rect(x, y, 92f, 20f), settings.IncludeOfficial, "含官方音乐"))
+            {
+                settings.IncludeOfficial = !settings.IncludeOfficial;
+                ModConfig.Settings = settings;
+                ModConfig.SaveUserConfig();
+            }
+
+            float bw = 74f;
+            float bx = _window.xMax - 12f - bw;
+
+            if (UI.Click(new Rect(bx, y, bw, 22f), "关闭"))
+            {
+                _visible = false;
+                return;
+            }
+            bx -= bw + 6f;
+
+            if (UI.Click(new Rect(bx, y, bw + 14f, 22f), "重新扫描"))
+            {
+                SaveAll(lib, settings);
+                if (host != null) host.RequestRescan();
+                SetStatus("开始重新扫描…");
+            }
+            bx -= bw + 20f;
+
+            if (UI.Click(new Rect(bx, y, bw, 22f), "保存"))
+            {
+                SaveAll(lib, settings);
+                SetStatus("已保存到配置文件");
+            }
+
+            if (!string.IsNullOrEmpty(_status) && Time.realtimeSinceStartup < _statusUntil)
+            {
+                UI.Label(new Rect(_window.x + 12f, y + 22f, _window.width - 24f, 18f),
+                    _status, false, false, true);
+            }
+            else
+            {
+                UI.Label(new Rect(_window.x + 12f, y + 22f, _window.width - 24f, 18f),
+                    string.Format("快捷键 {0} 开关本面板；权重 0 表示不参与随机，优先级数字越大越优先。",
+                        ModConfig.PanelKey), false, true);
             }
         }
 
@@ -487,103 +501,6 @@ namespace SeaPowerDynamicMusic
             int m = Mathf.FloorToInt(seconds / 60f);
             int s = Mathf.FloorToInt(seconds % 60f);
             return string.Format("{0}:{1:00}", m, s);
-        }
-
-        private GUIStyle _smallHeader;
-        private GUIStyle _headerStyleSmall()
-        {
-            if (_smallHeader == null)
-            {
-                _smallHeader = new GUIStyle(_labelStyle);
-                _smallHeader.fontStyle = FontStyle.Bold;
-            }
-            return _smallHeader;
-        }
-
-        // ------------------------------------------------------------------
-        // 样式
-        // ------------------------------------------------------------------
-
-        private void EnsureStyles()
-        {
-            if (_stylesReady) return;
-
-            _texPanel = Solid(new Color(0.07f, 0.09f, 0.11f, 0.96f));
-            _texRow = Solid(new Color(0f, 0f, 0f, 0f));
-            _texRowAlt = Solid(new Color(1f, 1f, 1f, 0.03f));
-            _texRowActive = Solid(new Color(0.16f, 0.35f, 0.48f, 0.85f));
-            _texScenRowActive = Solid(new Color(0.16f, 0.35f, 0.48f, 0.85f));
-            _texAccent = Solid(new Color(0.35f, 0.72f, 0.92f, 1f));
-            _texButton = Solid(new Color(0.20f, 0.24f, 0.28f, 1f));
-
-            _windowStyle = new GUIStyle(GUI.skin.window);
-            _windowStyle.normal.background = _texPanel;
-            _windowStyle.normal.textColor = new Color(0.90f, 0.93f, 0.96f);
-            _windowStyle.fontStyle = FontStyle.Bold;
-            _windowStyle.padding = new RectOffset(10, 10, 26, 8);
-
-            _labelStyle = new GUIStyle(GUI.skin.label);
-            _labelStyle.normal.textColor = new Color(0.88f, 0.91f, 0.94f);
-            _labelStyle.wordWrap = true;
-
-            _dimStyle = new GUIStyle(_labelStyle);
-            _dimStyle.normal.textColor = new Color(0.58f, 0.64f, 0.70f);
-
-            _titleStyle = new GUIStyle(_labelStyle);
-            _titleStyle.fontStyle = FontStyle.Bold;
-            _titleStyle.normal.textColor = _texAccent != null
-                ? new Color(0.55f, 0.82f, 0.98f) : Color.white;
-
-            _rowStyle = new GUIStyle(GUI.skin.box);
-            _rowStyle.normal.background = _texRow;
-            _rowStyle.normal.textColor = _labelStyle.normal.textColor;
-            _rowStyle.padding = new RectOffset(4, 4, 2, 2);
-            _rowStyle.margin = new RectOffset(0, 0, 1, 1);
-
-            _rowActiveStyle = new GUIStyle(_rowStyle);
-            _rowActiveStyle.normal.background = _texRowActive;
-            _rowActiveStyle.hover.background = _texRowActive;
-            _rowActiveStyle.normal.textColor = Color.white;
-            _rowActiveStyle.hover.textColor = Color.white;
-
-            _sceneRowStyle = new GUIStyle(GUI.skin.label);
-            _sceneRowStyle.normal.textColor = _labelStyle.normal.textColor;
-            _sceneRowStyle.alignment = TextAnchor.MiddleLeft;
-            _sceneRowStyle.padding = new RectOffset(6, 4, 0, 0);
-
-            _sceneRowActiveStyle = new GUIStyle(_sceneRowStyle);
-            _sceneRowActiveStyle.normal.background = _texScenRowActive;
-            _sceneRowActiveStyle.hover.background = _texScenRowActive;
-            _sceneRowActiveStyle.normal.textColor = Color.white;
-            _sceneRowActiveStyle.hover.textColor = Color.white;
-
-            _buttonStyle = new GUIStyle(GUI.skin.button);
-            _buttonStyle.normal.background = _texButton;
-            _buttonStyle.normal.textColor = _labelStyle.normal.textColor;
-            _buttonStyle.hover.background = _texAccent;
-            _buttonStyle.hover.textColor = new Color(0.05f, 0.08f, 0.10f);
-            _buttonStyle.fontStyle = FontStyle.Bold;
-
-            _badgeStyle = new GUIStyle(_labelStyle);
-            _badgeStyle.normal.textColor = new Color(0.95f, 0.55f, 0.45f);
-
-            // 分类勾选用的小方块，比普通按钮紧凑
-            _chipStyle = new GUIStyle(GUI.skin.toggle);
-            _chipStyle.fontSize = 10;
-            _chipStyle.padding = new RectOffset(2, 2, 0, 0);
-            _chipStyle.margin = new RectOffset(1, 1, 0, 0);
-            _chipStyle.alignment = TextAnchor.MiddleCenter;
-
-            _stylesReady = true;
-        }
-
-        private static Texture2D Solid(Color c)
-        {
-            var t = new Texture2D(1, 1, TextureFormat.RGBA32, false);
-            t.SetPixel(0, 0, c);
-            t.Apply();
-            t.hideFlags = HideFlags.HideAndDontSave;
-            return t;
         }
     }
 }
