@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -297,82 +298,113 @@ namespace SeaPowerDynamicMusic
         };
 
         /// <summary>
-        /// 直接从 AssetBundle 读取全部官方曲目。
-        ///
-        /// 不能只依赖 MusicManager._allClips：实测那里通常只有 1 项
-        /// （当前选中的那首），其余曲目只在播放时才被引用。
-        /// 自己读 bundle 能拿到完整列表，且不干扰游戏状态。
+        /// 官方音乐文件所在目录，相对 StreamingAssets。
+        /// 7 个无扩展名的文件即 AssetBundle，每个里含多首曲子。
         /// </summary>
-        internal static int ImportFromBundles(MusicLibrary library)
+
+        /// <summary>
+        /// 从 AssetBundle 读取官方曲目（协程版）。
+        ///
+        /// 必须做成协程：LoadAllAssetsAsync 的内部加载要靠主线程推进，
+        /// 在主线程原地 while(!isDone) 空转会死锁，游戏会卡死在加载界面。
+        /// 之前就是这么写的，直接导致游戏打不开。
+        /// </summary>
+        internal static IEnumerator LoadFromBundlesRoutine(MusicLibrary library)
         {
-            int added = 0;
+            string root = Path.Combine(UnityEngine.Application.dataPath,
+                "StreamingAssets", "original", "audio", "music", "original");
 
-            try
+            if (!Directory.Exists(root))
             {
-                string root = Path.Combine(UnityEngine.Application.dataPath,
-                    "StreamingAssets", "original", "audio", "music", "original");
-                if (!Directory.Exists(root)) return 0;
-
-                foreach (string bundleName in BundleNames)
-                {
-                    string path = Path.Combine(root, bundleName);
-                    if (!File.Exists(path)) continue;
-
-                    added += LoadBundle(library, path, bundleName);
-                }
+                Plugin.Verbose("未找到官方音乐目录: " + root);
+                yield break;
             }
-            catch (Exception e)
+
+            int total = 0;
+
+            foreach (string bundleName in BundleNames)
             {
-                Plugin.LogWarn("从 AssetBundle 读取官方音乐失败: " + e.Message);
-            }
-            return added;
-        }
+                string path = Path.Combine(root, bundleName);
+                if (!File.Exists(path)) continue;
 
-        private static int LoadBundle(MusicLibrary library, string path, string bundleName)
-        {
-            UnityEngine.AssetBundle bundle = null;
-            int added = 0;
+                UnityEngine.AssetBundle bundle = null;
+                UnityEngine.AssetBundleRequest req = null;
+                bool failed = false;
 
-            try
-            {
-                bundle = UnityEngine.AssetBundle.LoadFromFile(path);
-                if (bundle == null) return 0;
-
-                UnityEngine.AssetBundleRequest req = bundle.LoadAllAssetsAsync<AudioClip>();
-                // 同步等待加载完成，游戏启动阶段这点开销可以接受
-                while (!req.isDone) { }
-
-                AudioClip[] clips = req.allAssets as AudioClip[];
-                if (clips == null || clips.Length == 0) return 0;
-
-                foreach (AudioClip clip in clips)
+                try
                 {
-                    if (clip == null) continue;
-                    if (library.FindByClip(clip) != null) continue;
-
-                    var track = new MusicTrack(clip.name, clip, true);
-                    foreach (MusicScene scene in ScenesForClip(clip.name, bundleName))
+                    bundle = UnityEngine.AssetBundle.LoadFromFile(path);
+                    if (bundle == null)
                     {
-                        track.Scenes.Add(scene);
+                        Plugin.LogWarn("无法打开官方音乐包: " + bundleName);
+                        failed = true;
+                    }
+                    else
+                    {
+                        req = bundle.LoadAllAssetsAsync<AudioClip>();
+                    }
+                }
+                catch (Exception e)
+                {
+                    Plugin.LogWarn(string.Format("读取 {0} 失败: {1}",
+                        bundleName, e.Message));
+                    failed = true;
+                }
+
+                // 关键：让出一帧，等 Input System 与资源加载推进
+                while (req != null && !req.isDone)
+                {
+                    yield return null;
+                }
+
+                if (!failed && req != null)
+                {
+                    int added = 0;
+                    try
+                    {
+                        AudioClip[] clips = req.allAssets as AudioClip[];
+                        if (clips != null)
+                        {
+                            foreach (AudioClip clip in clips)
+                            {
+                                if (clip == null) continue;
+                                if (library.FindByClip(clip) != null) continue;
+
+                                var track = new MusicTrack(clip.name, clip, true);
+                                foreach (MusicScene scene in ScenesForClip(clip.name, bundleName))
+                                {
+                                    track.Scenes.Add(scene);
+                                }
+                                library.AddOfficial(track);
+                                added++;
+                            }
+                        }
+                    }
+                    catch (Exception e)
+                    {
+                        Plugin.LogWarn(string.Format("解析 {0} 失败: {1}",
+                            bundleName, e.Message));
                     }
 
-                    library.AddOfficial(track);
-                    added++;
+                    total += added;
+                    Plugin.Verbose(string.Format("  {0}: {1} 首", bundleName, added));
                 }
 
-                Plugin.Verbose(string.Format("  {0}: {1} 首", bundleName, added));
-            }
-            catch (Exception e)
-            {
-                Plugin.LogWarn(string.Format("读取 {0} 失败: {1}",
-                    bundleName, e.Message));
-            }
-            finally
-            {
-                if (bundle != null) bundle.Unload(false);
+                if (bundle != null)
+                {
+                    try { bundle.Unload(false); }
+                    catch { }
+                }
             }
 
-            return added;
+            if (total > 0)
+            {
+                Plugin.LogInfo(string.Format("已从 AssetBundle 载入 {0} 首官方音乐", total));
+            }
+            else
+            {
+                Plugin.LogWarn("未能从 AssetBundle 载入官方音乐，面板里将看不到官方曲目。");
+            }
         }
 
         /// <summary>把游戏自带音乐导入音乐库。游戏尚未加载完时返回 0。</summary>

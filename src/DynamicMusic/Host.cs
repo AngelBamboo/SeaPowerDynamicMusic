@@ -50,6 +50,10 @@ namespace SeaPowerDynamicMusic
             MusicDirector.ReadTrackSettings(ini, Library);
             Library.RebuildIndex();
 
+            // 官方音乐从 AssetBundle 异步载入，Scan 里不做等待
+            yield return OfficialMusic.LoadFromBundlesRoutine(Library);
+            Library.RebuildIndex();
+
             if (Library.AllTracks.Count == 0)
             {
                 WarnEmptyLibrary();
@@ -176,6 +180,8 @@ namespace SeaPowerDynamicMusic
                 Plugin.CollectLibraryRoots();
                 Library.Scan(Plugin.LibraryRoots, ini, ModConfig.LibraryRoot);
                 MusicDirector.ReadTrackSettings(ini, Library);
+                Library.RebuildIndex();
+                yield return OfficialMusic.LoadFromBundlesRoutine(Library);
                 Library.RebuildIndex();
                 yield return Library.LoadAllCoroutine();
 
