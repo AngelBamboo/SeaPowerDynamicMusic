@@ -86,7 +86,11 @@ namespace SeaPowerDynamicMusic
             if (!MouseInput.Held) _dragging = false;
         }
 
-        /// <summary>自绘按钮，返回 true 表示本帧被点击。</summary>
+        /// <summary>
+        /// 自绘按钮，返回 true 表示本帧被点击。
+        /// 用「按下」而不是「松开」判定：游戏可能在按住期间改变鼠标状态，
+        /// 只等松开会漏掉点击。
+        /// </summary>
         internal static bool Click(Rect r, string text, bool enabled = true)
         {
             bool hover = enabled && MouseInput.Contains(r);
@@ -100,7 +104,10 @@ namespace SeaPowerDynamicMusic
 
             Label(r, text, false, !enabled, false, TextAnchor.MiddleCenter);
 
-            return enabled && MouseInput.Contains(r) && MouseInput.Released;
+            if (!enabled) return false;
+
+            // 按下或松开都算点击，任一成立即触发
+            return MouseInput.Contains(r) && (MouseInput.Pressed || MouseInput.Released);
         }
 
         /// <summary>
@@ -177,7 +184,7 @@ namespace SeaPowerDynamicMusic
                 r.width - boxSize - 5f, r.height);
             Label(textRect, text, false, !value);
 
-            return MouseInput.Contains(r) && MouseInput.Released;
+            return MouseInput.Contains(r) && (MouseInput.Pressed || MouseInput.Released);
         }
     }
 }

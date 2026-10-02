@@ -121,6 +121,7 @@ namespace SeaPowerDynamicMusic
             var player = Plugin.Instance != null ? Plugin.Instance.Player : null;
             var settings = Plugin.Instance != null ? Plugin.Instance.Settings : null;
 
+            _windowBounds = _window;
             UI.Fill(_window, UI.Panel);
             DrawTitleBar();
 
@@ -130,6 +131,11 @@ namespace SeaPowerDynamicMusic
                 _lastEdgeFrame = Time.frameCount;
                 _clickCount++;
             }
+
+            // 在整个屏幕画出鼠标位置十字。
+            // 代码读到的坐标若与真实光标不符，命中判定就必然失败，
+            // 画出来比看数字直观得多。
+            DrawMouseCrosshair();
 
             if (lib == null || director == null || player == null || settings == null)
             {
@@ -156,6 +162,36 @@ namespace SeaPowerDynamicMusic
 
             DrawFooter(settings, player);
         }
+
+        /// <summary>
+        /// 在代码读到的鼠标位置画十字，并标出窗口矩形范围。
+        /// 用于判断坐标系是否与界面一致。
+        /// </summary>
+        private static void DrawMouseCrosshair()
+        {
+            Vector2 m = MouseInput.GuiPosition;
+            const float arm = 16f;
+            const float th = 2f;
+
+            Color old = GUI.color;
+
+            GUI.color = new Color(1f, 0.35f, 0.35f, 0.95f);
+            UI.Fill(new Rect(m.x - arm, m.y - th * 0.5f, arm * 2f, th), GUI.color);
+            UI.Fill(new Rect(m.x - th * 0.5f, m.y - arm, th, arm * 2f), GUI.color);
+
+            // 窗口边框，方便对比鼠标是否在窗口内
+            GUI.color = new Color(0.35f, 0.95f, 0.5f, 0.8f);
+            var w = _windowBounds;
+            UI.Fill(new Rect(w.x, w.yMax - 2f, w.width, 2f), GUI.color);
+            UI.Fill(new Rect(w.x, w.y, w.width, 2f), GUI.color);
+            UI.Fill(new Rect(w.x, w.y, 2f, w.height), GUI.color);
+            UI.Fill(new Rect(w.xMax - 2f, w.y, 2f, w.height), GUI.color);
+
+            GUI.color = old;
+        }
+
+        /// <summary>供十字标记使用的窗口矩形。</summary>
+        private static Rect _windowBounds;
 
         private void DrawTitleBar()
         {
