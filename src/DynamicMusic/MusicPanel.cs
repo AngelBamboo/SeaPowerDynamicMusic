@@ -48,8 +48,22 @@ namespace SeaPowerDynamicMusic
             // 放在 OnGUI 里会被多次调用消耗掉，导致点击永远不触发。
             MouseInput.BeginFrame();
 
+            // 记录 Update 是否真的在跑，以及最近一次检测到边沿的帧号。
+            // 如果 UpdateFrame 一直是 0，说明 Update 没被调用，
+            // 边沿也就永远不会刷新。
+            if (Time.frameCount != _lastUpdateFrame)
+            {
+                _lastUpdateFrame = Time.frameCount;
+                _updateCount++;
+            }
+
             if (HotkeyPressed()) _visible = !_visible;
         }
+
+        private int _lastUpdateFrame = -1;
+        private int _updateCount;
+        private int _lastEdgeFrame = -1;
+        private int _clickCount;
 
         /// <summary>
         /// 兼容新旧两套输入系统：游戏若只启用 Input System，
@@ -89,8 +103,10 @@ namespace SeaPowerDynamicMusic
         {
             if (!_visible) return;
 
-            // 面板显示时接管输入焦点，让游戏别抢鼠标
-            InputFocusGuard.SetTyping(true);
+            // 注意：这里不要再设 InputFocusGuard.SetTyping(true)。
+            // 诊断显示「按下 是」说明按键读到了，但点击不触发，
+            // 怀疑是 typingActive 让游戏进入文本输入状态后锁住了鼠标。
+            // 自绘控件直接读 Input System，不需要抢输入焦点。
 
             GUI.depth = -1000;
             UI.EnsureStyles();
@@ -107,6 +123,13 @@ namespace SeaPowerDynamicMusic
 
             UI.Fill(_window, UI.Panel);
             DrawTitleBar();
+
+            // 边沿到达计数：任何位置检测到松开都算，用来确认输入有没有进来
+            if (MouseInput.Released)
+            {
+                _lastEdgeFrame = Time.frameCount;
+                _clickCount++;
+            }
 
             if (lib == null || director == null || player == null || settings == null)
             {
@@ -485,17 +508,19 @@ namespace SeaPowerDynamicMusic
                     string.Format("快捷键 {0} 开关面板；权重 0 不参与随机，优先级越大越优先",
                         ModConfig.PanelKey), false, true);
 
-                // 诊断信息：点击一直不生效时，用它确认鼠标到底读没读到
+                // 诊断信息：点击一直不生效时，用它确认输入到底进没进来
                 UI.Label(new Rect(_window.x + 470f, y + 20f, _window.width - 482f, 18f),
-                    string.Format("{0} | 屏幕 {1}x{2} | 鼠标 {3:F0},{4:F0} | 按下 {5} 边沿 {6}",
+                    string.Format("输入 {0} | 鼠标 {1:F0},{2:F0} | 按下 {3} | 边沿 {4} | 松开计数 {5} | Update {6} | 帧 {7}",
                         MouseInput.DeviceFound ? MouseInput.Source : "无设备",
-                        Screen.width, Screen.height,
                         MouseInput.GuiPosition.x, MouseInput.GuiPosition.y,
                         MouseInput.RawHeld ? "是" : "否",
                         (MouseInput.RawPressed ? "按下" : "") +
                         (MouseInput.RawReleased ? "松开" : "") == string.Empty
-                            ? "无" : (MouseInput.RawPressed ? "按下" : "松开")),
-                    false, true, !MouseInput.DeviceFound);
+                            ? "无" : (MouseInput.RawPressed ? "按下" : "松开"),
+                        _clickCount,
+                        _updateCount > 0 ? "运行中" : "未运行",
+                        Time.frameCount - _lastEdgeFrame),
+                    false, true, !MouseInput.DeviceFound || _updateCount == 0);
             }
         }
 
