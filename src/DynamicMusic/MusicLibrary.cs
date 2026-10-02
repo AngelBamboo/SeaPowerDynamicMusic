@@ -107,7 +107,9 @@ namespace SeaPowerDynamicMusic
             int fromConfig = ScanConfig(config, primaryRoot);
 
             // 官方音乐在用户音乐之后导入，作为兜底而非主力
-            int official = OfficialMusic.Import(this);
+            // 先从 AssetBundle 读全部官方曲目，再补充游戏当前持有的
+            int official = OfficialMusic.ImportFromBundles(this);
+            official += OfficialMusic.Import(this);
 
             // 稳定排序，保证顺序可预期
             foreach (var kv in _byScene)

@@ -327,12 +327,10 @@ namespace SeaPowerDynamicMusic
             UI.Label(new Rect(area.x, area.y, 200f, 20f),
                 SceneInfo.SceneName(_scene) + "  曲目", true);
 
-            // 筛选框：自己画，不依赖 IMGUI 的 TextField
-            var boxW = 130f;
+            // 筛选框：自绘输入，能真正接收键盘
+            var boxW = 150f;
             var box = new Rect(area.xMax - boxW - 58f, area.y, boxW, 20f);
-            UI.Fill(box, new Color(0f, 0f, 0f, 0.4f));
-            UI.Label(box, string.IsNullOrEmpty(_filter) ? "筛选" : _filter,
-                false, string.IsNullOrEmpty(_filter));
+            if (UI.TextField(box, ref _filter, "筛选曲名")) { }
 
             if (UI.Click(new Rect(area.xMax - 54f, area.y, 54f, 20f), "清空"))
             {
@@ -531,6 +529,9 @@ namespace SeaPowerDynamicMusic
                 settings.Shuffle = !settings.Shuffle;
                 ModConfig.Settings = settings;
                 ModConfig.SaveUserConfig();
+                if (Plugin.Instance != null && Plugin.Instance.Director != null)
+                    Plugin.Instance.Director.ApplySettings(settings);
+                SetStatus("随机播放: " + (settings.Shuffle ? "开" : "关"));
             }
             x += 60f;
 
@@ -539,18 +540,22 @@ namespace SeaPowerDynamicMusic
                 settings.IncludeOfficial = !settings.IncludeOfficial;
                 ModConfig.Settings = settings;
                 ModConfig.SaveUserConfig();
+                if (Plugin.Instance != null && Plugin.Instance.Director != null)
+                    Plugin.Instance.Director.ApplySettings(settings);
+                SetStatus(settings.IncludeOfficial
+                    ? "官方音乐会参与随机"
+                    : "只播你自己的曲子");
             }
             x += 100f;
 
             // 鼠标穿透：开启后点击会同时作用于游戏界面，方便边看面板边操作
             var pass = new Rect(x, y, 92f, 20f);
-            bool passChanged = UI.Checkbox(pass, _mousePassthrough, "鼠标穿透");
-            if (passChanged)
+            if (UI.Checkbox(pass, _mousePassthrough, "鼠标穿透"))
             {
                 _mousePassthrough = !_mousePassthrough;
-                // 状态常驻在勾选框上，不需要靠提示文字维持
-                _status = "";
-                _statusUntil = 0f;
+                SetStatus(_mousePassthrough
+                    ? "已开启鼠标穿透：点击会穿过面板作用于游戏"
+                    : "已关闭鼠标穿透：点击只作用于本面板");
             }
 
             float bw = 74f;

@@ -175,20 +175,202 @@ namespace SeaPowerDynamicMusic
         }
 
         /// <summary>
-        /// 已消费点击的帧号。
+        /// 每个控件独立记录已消费的帧。
         ///
-        /// Unity 的 OnGUI 每帧会被调用多次（Layout / Repaint / Input），
-        /// 若不按帧去重，一次点击会被处理多次，表现为勾选框闪一下又变回去。
+        /// 不能用全局单一帧号：那会导致同一帧里只有第一个命中的控件
+        /// 能响应，底部一排勾选框只有第一个能点。必须按控件区分。
+        ///
+        /// 用点击位置做键：同一位置的重复处理才会被去重，
+        /// 不同控件互不影响。
         /// </summary>
-        private static int _consumedFrame = -1;
+        private static readonly System.Collections.Generic.Dictionary<int, int> _consumed
+            = new System.Collections.Generic.Dictionary<int, int>();
 
-        /// <summary>本帧是否已经消费过一次点击。</summary>
+        /// <summary>本次点击是否已被本控件消费过。</summary>
         internal static bool ConsumeClick()
         {
             int frame = Time.frameCount;
-            if (_consumedFrame == frame) return false;
-            _consumedFrame = frame;
+            Vector2 p = MouseInput.Position;
+
+            // 量化到 2 像素，浮点抖动不会当成不同位置
+            int key = ((int)(p.x / 2f) << 16) ^ (int)(p.y / 2f);
+
+            int last;
+            if (_consumed.TryGetValue(key, out last) && last == frame) return false;
+
+            _consumed[key] = frame;
+
+            // 只保留最近若干条，避免字典无限增长
+            if (_consumed.Count > 64) _consumed.Clear();
             return true;
+        }
+
+        /// <summary>
+        /// 自绘文本输入框。返回 true 表示内容有变化。
+        ///
+        /// 自己实现而不用 GUILayout.TextField，原因同按钮：
+        /// IMGUI 的输入控件在只启用 Input System 时收不到键盘事件。
+        /// 支持退格、删除、左右移动、Home/End、大写、粘贴。
+        /// </summary>
+        internal static bool TextField(Rect r, ref string value, string placeholder)
+        {
+            bool changed = false;
+            bool focus = r.Contains(MouseInput.Position) && MouseInput.Pressed;
+
+            if (focus)
+            {
+                _focused = true;
+                _caret = (value ?? "").Length;
+            }
+            else if (MouseInput.Pressed)
+            {
+                _focused = false;
+            }
+
+            if (_focused) HandleKeys(ref value, ref changed);
+
+            Fill(r, new Color(0f, 0f, 0f, 0.45f));
+            if (_focused)
+            {
+                Fill(new Rect(r.x, r.yMax - 1.5f, r.width, 1.5f), Accent);
+            }
+
+            if (string.IsNullOrEmpty(value))
+            {
+                Label(r, placeholder, false, true);
+            }
+            else
+            {
+                // 文本左对齐，光标画在末尾
+                var style = new GUIStyle(_label) { alignment = TextAnchor.MiddleLeft };
+                GUI.Label(r, value, style);
+
+                if (_focused && _blink)
+                {
+                    float w = Measure(value);
+                    Fill(new Rect(r.x + w + 1f, r.y + 4f, 1.5f, r.height - 8f),
+                        new Color(1f, 1f, 1f, 0.9f));
+                }
+            }
+
+            return changed;
+        }
+
+        private static bool _focused;
+        private static int _caret;
+        private static float _blinkTimer;
+        private static bool _blink = true;
+
+        private static float Measure(string s)
+        {
+            float w = 0f;
+            for (int i = 0; i < s.Length; i++) w += s[i] > 127 ? 12f : 6.5f;
+            return w;
+        }
+
+        private static void HandleKeys(ref string value, ref bool changed)
+        {
+            if (value == null) value = "";
+            if (_caret > value.Length) _caret = value.Length;
+            if (_caret < 0) _caret = 0;
+
+            // onTextInput 是事件，每帧先取走本帧输入的字符
+            string typed = "";
+            try
+            {
+                var kb = UnityEngine.InputSystem.Keyboard.current;
+                if (kb != null)
+                {
+                    typed = ReadTextInput();
+                }
+            }
+            catch { }
+
+            if (KeyDown("backspace"))
+            {
+                if (_caret > 0)
+                {
+                    value = value.Remove(_caret - 1, 1);
+                    _caret--;
+                    changed = true;
+                }
+            }
+            else if (KeyDown("delete"))
+            {
+                if (_caret < value.Length)
+                {
+                    value = value.Remove(_caret, 1);
+                    changed = true;
+                }
+            }
+            else if (KeyDown("leftArrow")) { _caret = Mathf.Max(0, _caret - 1); return; }
+            else if (KeyDown("rightArrow")) { _caret = Mathf.Min(value.Length, _caret + 1); return; }
+            else if (KeyDown("home")) { _caret = 0; return; }
+            else if (KeyDown("end")) { _caret = value.Length; return; }
+            else if (!string.IsNullOrEmpty(typed))
+            {
+                value = value.Insert(_caret, typed);
+                _caret += typed.Length;
+                changed = true;
+            }
+
+            _blinkTimer = 0f;
+            _blink = true;
+        }
+
+        /// <summary>
+        /// 字符输入队列。
+        ///
+        /// onTextInput 是 Keyboard 的实例事件，事件在 Input System 更新时派发，
+        /// 而 OnGUI 可能在事件之后才跑。所以这里做常驻订阅把字符攒进队列，
+        /// 由输入框每帧取走，避免漏字。
+        /// </summary>
+        private static readonly System.Text.StringBuilder _typedBuffer
+            = new System.Text.StringBuilder();
+
+        private static bool _hooked;
+
+        private static void EnsureTextHook()
+        {
+            if (_hooked) return;
+            try
+            {
+                var kb = UnityEngine.InputSystem.Keyboard.current;
+                if (kb == null) return;
+                kb.onTextInput += OnText;
+                _hooked = true;
+            }
+            catch { }
+        }
+
+        private static void OnText(char c)
+        {
+            _typedBuffer.Append(c);
+        }
+
+        /// <summary>取走本帧积累的字符。</summary>
+        private static string ReadTextInput()
+        {
+            EnsureTextHook();
+            if (_typedBuffer.Length == 0) return "";
+            string s = _typedBuffer.ToString();
+            _typedBuffer.Length = 0;
+            return s;
+        }
+
+        private static bool KeyDown(string key)
+        {
+            try
+            {
+                var kb = UnityEngine.InputSystem.Keyboard.current;
+                if (kb == null) return false;
+                var btn = kb[key] as UnityEngine.InputSystem.Controls.ButtonControl;
+                return btn != null && btn.wasPressedThisFrame;
+            }
+            catch
+            {
+                return false;
+            }
         }
 
         /// <summary>

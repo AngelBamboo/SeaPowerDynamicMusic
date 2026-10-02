@@ -32,9 +32,8 @@ namespace SeaPowerDynamicMusic
             // 等游戏完成自身初始化，避免和加载流程抢资源
             yield return new WaitForSecondsRealtime(2f);
 
-            // 官方音乐由游戏从 AssetBundle 加载，时机不确定，
-            // 这里轮询等待它就绪，最多等 30 秒，避免首次扫描扑空。
-            yield return WaitForOfficialMusic();
+            // 官方音乐我们自己从 AssetBundle 读，不依赖游戏的加载时机，
+            // 所以不需要等待。
 
             Settings = ModConfig.Settings;
             Library = new MusicLibrary();
@@ -76,12 +75,11 @@ namespace SeaPowerDynamicMusic
                 _panel = MusicPanel.Create(transform);
             }
 
-            if (Settings.ReplaceVanilla)
-                {
-                    // 持续压制，不是一次性停播
-                    _silence = true;
-                    SilenceVanillaMusic();
-                }
+            // 是否压制游戏原生音乐，由 VanillaMusicBlock 的补丁读取
+            BlockVanilla = Settings.ReplaceVanilla;
+            Plugin.LogInfo(BlockVanilla
+                ? "已接管音乐播放，游戏原生音乐将被拦截。"
+                : "未接管，游戏原生音乐与自定义音乐会同时播放。");
 
             Director.Begin();
 
@@ -191,60 +189,9 @@ namespace SeaPowerDynamicMusic
         }
 
         /// <summary>
-        /// 阻止游戏继续播放它自己的音乐。
-        ///
-        /// 只调一次 Stop 是不够的：游戏在切换场景时会再次调用
-        /// PlayMusic / PlayCurrentlySelectedMusic 重新起播，
-        /// 于是两路音乐叠在一起。这里持续压制，直到宿主销毁。
+        /// 停止对游戏原生音乐的压制。
+        /// 压制由 VanillaMusicBlock 的 Harmony 补丁完成，这里只保留开关。
         /// </summary>
-        private float _silenceTimer;
-
-        private void Update()
-        {
-            if (!_silence) return;
-
-            _silenceTimer += Time.unscaledDeltaTime;
-            if (_silenceTimer < 0.25f) return;
-            _silenceTimer = 0f;
-
-            SilenceVanillaMusic();
-        }
-
-        private bool _silence;
-
-        /// <summary>
-        /// 让游戏自带的 MusicManager 停播，避免和自定义音乐叠在一起。
-        /// 全部用反射调用，找不到就跳过，不影响自定义音乐播放。
-        /// </summary>
-        private static void SilenceVanillaMusic()
-        {
-            try
-            {
-                Type t = AccessTools.TypeByName("SeaPower.MusicManager");
-                if (t == null || t.BaseType == null) return;
-
-                var getter = AccessTools.Method(t.BaseType, "get_Instance");
-                if (getter == null) return;
-
-                object manager = getter.Invoke(null, null);
-                if (manager == null) return;
-
-                // RemoveCurrentTrack 会把当前曲目从列表移除并停播，
-                // 比单纯 Stop 更彻底，可避免游戏随后又起播。
-                var remove = AccessTools.Method(t, "RemoveCurrentTrack");
-                if (remove != null)
-                {
-                    remove.Invoke(manager, null);
-                    return;
-                }
-
-                var stop = AccessTools.Method(t, "Stop");
-                if (stop != null) stop.Invoke(manager, null);
-            }
-            catch (Exception e)
-            {
-                Plugin.Verbose("停掉原生音乐时出错（不影响自定义音乐）: " + e.Message);
-            }
-        }
+        internal bool BlockVanilla = true;
     }
 }

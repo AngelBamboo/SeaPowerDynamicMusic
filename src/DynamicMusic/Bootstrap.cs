@@ -184,6 +184,17 @@ namespace SeaPowerDynamicMusic
             {
                 LogError("挂接游戏事件失败，将只使用基础播放功能: " + e);
             }
+
+            // 音乐拦截单独处理，它有多个重载需要分别定位
+            try
+            {
+                var harmony = new HarmonyLib.Harmony(Guid + ".vanilla");
+                VanillaMusicBlock.Apply(harmony);
+            }
+            catch (Exception e)
+            {
+                LogWarn("拦截原生音乐失败，游戏原声可能会同时播放: " + e.Message);
+            }
         }
 
         private static void CreateHost()

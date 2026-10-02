@@ -107,6 +107,105 @@ namespace SeaPowerDynamicMusic
     }
 
     /// <summary>
+    /// 拦截游戏的音乐播放，实现单一控制源。
+    ///
+    /// 之前用 MusicManager.RemoveCurrentTrack 停播，但它会把曲目
+    /// 从 _allClips 里删除，导致重扫时官方音乐越扫越少（最终 0 首）。
+    /// 这里改成在播放入口直接拦截：既不碰游戏数据，也不会与自定义音乐叠加。
+    ///
+    /// 拦截点覆盖三个入口：
+    ///   PlayMusic()、PlayMusic(MusicClipData, bool)、PlayCurrentlySelectedMusic()
+    /// </summary>
+    internal static class VanillaMusicBlock
+    {
+        private static MethodBase _playMusic;
+        private static MethodBase _playMusicWithClip;
+        private static MethodBase _playCurrentlySelected;
+        private static bool _ready;
+
+        /// <summary>由 Host 在初始化时设置。为真时拦截游戏起播。</summary>
+        internal static bool Blocked = true;
+
+        [HarmonyPrepare]
+        private static bool Prepare()
+        {
+            try
+            {
+                Type t = AccessTools.TypeByName("SeaPower.MusicManager");
+                if (t == null)
+                {
+                    Plugin.LogWarn("未找到 MusicManager，无法拦截原生音乐。");
+                    return false;
+                }
+
+                _playMusic = AccessTools.Method(t, "PlayMusic", new Type[0]);
+                _playMusicWithClip = AccessTools.Method(t, "PlayMusic",
+                    new[] { AccessTools.TypeByName("SeaPower.MusicClipData"), typeof(bool) });
+                _playCurrentlySelected = AccessTools.Method(t, "PlayCurrentlySelectedMusic");
+
+                _ready = _playMusic != null || _playMusicWithClip != null
+                         || _playCurrentlySelected != null;
+
+                if (!_ready)
+                {
+                    Plugin.LogWarn("MusicManager 的播放方法签名变化，拦截可能失效。");
+                }
+                return _ready;
+            }
+            catch (Exception e)
+            {
+                Plugin.LogWarn("拦截原生音乐失败: " + e.Message);
+                return false;
+            }
+        }
+
+        private static bool ShouldBlock()
+        {
+            var host = Plugin.Instance;
+            if (host == null) return false;
+            return host.BlockVanilla;
+        }
+
+        [HarmonyPrefix]
+        private static bool Prefix_PlayMusic()
+        {
+            return !ShouldBlock();
+        }
+
+        [HarmonyPrefix]
+        private static bool Prefix_PlayMusicWithClip()
+        {
+            return !ShouldBlock();
+        }
+
+        [HarmonyPrefix]
+        private static bool Prefix_PlayCurrentlySelected()
+        {
+            return !ShouldBlock();
+        }
+
+        /// <summary>把这些方法加入补丁，单独调用以便分别处理重载。</summary>
+        internal static void Apply(HarmonyLib.Harmony harmony)
+        {
+            var hPlayMusic = new HarmonyLib.HarmonyMethod(
+                typeof(VanillaMusicBlock).GetMethod("Prefix_PlayMusic",
+                    System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static));
+            var hPlayMusicWithClip = new HarmonyLib.HarmonyMethod(
+                typeof(VanillaMusicBlock).GetMethod("Prefix_PlayMusicWithClip",
+                    System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static));
+            var hPlaySelected = new HarmonyLib.HarmonyMethod(
+                typeof(VanillaMusicBlock).GetMethod("Prefix_PlayCurrentlySelected",
+                    System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static));
+
+            if (_playMusic != null) harmony.Patch(_playMusic, prefix: hPlayMusic);
+            if (_playMusicWithClip != null)
+                harmony.Patch(_playMusicWithClip, prefix: hPlayMusicWithClip);
+            if (_playCurrentlySelected != null)
+                harmony.Patch(_playCurrentlySelected, prefix: hPlaySelected);
+        }
+    }
+
+    /// <summary>
     /// 挂接 MusicManager 的场景切换属性。
     /// 游戏内部切换场景时通知插件，插件据此选择对应的音乐分类。
     /// </summary>

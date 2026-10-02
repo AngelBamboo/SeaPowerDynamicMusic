@@ -34,6 +34,10 @@
       <HintPath>$(ManagedDir)\Seapower-Scripts.dll</HintPath>
       <Private>false</Private>
     </Reference>
+    <Reference Include="UnityEngine.AssetBundleModule">
+      <HintPath>$(ManagedDir)\UnityEngine.AssetBundleModule.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
     <Reference Include="UnityEngine">
       <HintPath>$(ManagedDir)\UnityEngine.dll</HintPath>
       <Private>false</Private>

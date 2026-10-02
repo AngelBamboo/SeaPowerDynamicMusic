@@ -184,6 +184,14 @@ namespace SeaPowerDynamicMusic
             DisplayName = displayName;
             Clip = clip;
             Official = official;
+
+            if (official)
+            {
+                // 官方音乐默认参与播放且优先级最高，
+                // 玩家新增的音乐不会盖过它们，除非主动调整。
+                Weight = 1f;
+                Priority = 5;
+            }
         }
 
         public MusicTrack(string filePath, MusicScene scene, bool manuallyAssigned)
@@ -193,10 +201,11 @@ namespace SeaPowerDynamicMusic
             Scenes.Add(scene);
             ManuallyAssigned = manuallyAssigned;
 
-            // 新发现的曲子默认不参与播放。首次装上模组时先按游戏原本的逻辑
-            // 放官方音乐，玩家在面板里调好归属与权重后才开始播放自己的曲子。
-            // 从配置文件读回设置时 ReadTrackSettings 会覆盖这个默认值。
+            // 玩家新增的曲子默认不播放、优先级最低。
+            // 先按官方音乐的逻辑走，玩家在面板里调好归属与权重后才启用。
+            // 从配置文件读回设置时 ReadTrackSettings 会覆盖这两个默认值。
             Weight = 0f;
+            Priority = 0;
             Excluded = true;
         }
 
@@ -276,6 +285,94 @@ namespace SeaPowerDynamicMusic
             {
                 return false;
             }
+        }
+
+        /// <summary>
+        /// 官方音乐文件所在目录，相对 StreamingAssets。
+        /// 7 个无扩展名的文件即 AssetBundle，每个里含多首曲子。
+        /// </summary>
+        private static readonly string[] BundleNames =
+        {
+            "0_mainmenu", "nato", "wp", "night", "strategicmap", "victory", "defeat"
+        };
+
+        /// <summary>
+        /// 直接从 AssetBundle 读取全部官方曲目。
+        ///
+        /// 不能只依赖 MusicManager._allClips：实测那里通常只有 1 项
+        /// （当前选中的那首），其余曲目只在播放时才被引用。
+        /// 自己读 bundle 能拿到完整列表，且不干扰游戏状态。
+        /// </summary>
+        internal static int ImportFromBundles(MusicLibrary library)
+        {
+            int added = 0;
+
+            try
+            {
+                string root = Path.Combine(UnityEngine.Application.dataPath,
+                    "StreamingAssets", "original", "audio", "music", "original");
+                if (!Directory.Exists(root)) return 0;
+
+                foreach (string bundleName in BundleNames)
+                {
+                    string path = Path.Combine(root, bundleName);
+                    if (!File.Exists(path)) continue;
+
+                    added += LoadBundle(library, path, bundleName);
+                }
+            }
+            catch (Exception e)
+            {
+                Plugin.LogWarn("从 AssetBundle 读取官方音乐失败: " + e.Message);
+            }
+            return added;
+        }
+
+        private static int LoadBundle(MusicLibrary library, string path, string bundleName)
+        {
+            UnityEngine.AssetBundle bundle = null;
+            int added = 0;
+
+            try
+            {
+                bundle = UnityEngine.AssetBundle.LoadFromFile(path);
+                if (bundle == null) return 0;
+
+                UnityEngine.AssetBundleRequest req = bundle.LoadAllAssetsAsync<AudioClip>();
+                // 同步等待加载完成，游戏启动阶段这点开销可以接受
+                while (!req.isDone) { }
+
+                AudioClip[] clips = req.allAssets as AudioClip[];
+                if (clips == null || clips.Length == 0) return 0;
+
+                foreach (AudioClip clip in clips)
+                {
+                    if (clip == null) continue;
+                    if (library.FindByClip(clip) != null) continue;
+
+                    var track = new MusicTrack(clip.name, clip, true);
+                    foreach (MusicScene scene in ScenesForClip(clip.name, bundleName))
+                    {
+                        track.Scenes.Add(scene);
+                    }
+
+                    library.AddOfficial(track);
+                    added++;
+                }
+
+                Plugin.Verbose(string.Format("  {0}: {1} 首", bundleName, added));
+            }
+            catch (Exception e)
+            {
+                Plugin.LogWarn(string.Format("读取 {0} 失败: {1}",
+                    bundleName, e.Message));
+            }
+            finally
+            {
+                if (bundle != null) bundle.Unload(false);
+            }
+
+            return added;
         }
 
         /// <summary>把游戏自带音乐导入音乐库。游戏尚未加载完时返回 0。</summary>
