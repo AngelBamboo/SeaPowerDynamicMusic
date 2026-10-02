@@ -112,10 +112,28 @@ namespace SeaPowerDynamicMusic
         {
             if (!_visible) return;
 
-            EnsureStyles();
+            // depth 越小越靠上层，必须压过游戏自己的 IMGUI，
+            // 否则面板画在游戏界面之下，鼠标事件也被它先吃掉。
+            GUI.depth = -1000;
 
+            // 面板外点击不关闭，避免误触；也不必消费，交由游戏处理
+            Event current = Event.current;
+            if (current != null && current.type == EventType.MouseDown
+                && !_window.Contains(current.mousePosition))
+            {
+                return;
+            }
+
+            EnsureStyles();
             _window = GUILayout.Window(0x5EA10, _window, DrawWindow,
                 "动态音乐  Dynamic Music", _windowStyle);
+
+            // 关键：窗口处理完之后把鼠标事件标记为已使用，
+            // 这样同一次点击不会再传给游戏的 Noesis 界面，
+            // 表现为点面板没反应却点到了游戏自己的按钮。
+            // 必须在 Window 之后做，提前 Use 会让控件收不到事件。
+            var e = Event.current;
+            if (e != null && e.isMouse) e.Use();
         }
 
         private void DrawWindow(int id)

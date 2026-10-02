@@ -192,6 +192,12 @@ namespace SeaPowerDynamicMusic
             DisplayName = Path.GetFileNameWithoutExtension(filePath);
             Scenes.Add(scene);
             ManuallyAssigned = manuallyAssigned;
+
+            // 新发现的曲子默认不参与播放。首次装上模组时先按游戏原本的逻辑
+            // 放官方音乐，玩家在面板里调好归属与权重后才开始播放自己的曲子。
+            // 从配置文件读回设置时 ReadTrackSettings 会覆盖这个默认值。
+            Weight = 0f;
+            Excluded = true;
         }
 
         /// <summary>是否由用户在配置里手动指定。</summary>
@@ -255,17 +261,24 @@ namespace SeaPowerDynamicMusic
                     return 0;
                 }
 
+                // MusicManager 继承 Singleton<MusicManager>，Instance 是泛型基类上的
+                // 泛型属性，用 PropertyGetter 取容易拿不到。直接找静态的 get_Instance
+                // 更稳，它同样定义在基类上。
                 var singletonBase = mmType.BaseType;
-                var instanceProp = singletonBase == null
-                    ? null
-                    : AccessTools.PropertyGetter(singletonBase, "Instance");
-                if (instanceProp == null)
+                if (singletonBase == null)
                 {
-                    Plugin.LogWarn("MusicManager 的 Instance 属性签名变化，跳过官方音乐导入。");
+                    Plugin.LogWarn("MusicManager 没有基类，无法定位 Singleton。");
                     return 0;
                 }
 
-                object manager = instanceProp.Invoke(null, null);
+                var getter = AccessTools.Method(singletonBase, "get_Instance");
+                if (getter == null)
+                {
+                    Plugin.LogWarn("未找到 Singleton.get_Instance，跳过官方音乐导入。");
+                    return 0;
+                }
+
+                object manager = getter.Invoke(null, null);
                 if (manager == null)
                 {
                     Plugin.Verbose("MusicManager 实例尚未创建，稍后重试。");
@@ -282,20 +295,32 @@ namespace SeaPowerDynamicMusic
                 var list = clipsField.GetValue(manager) as System.Collections.IEnumerable;
                 if (list == null)
                 {
-                    Plugin.Verbose("官方音乐列表为空，稍后重试。");
+                    Plugin.LogWarn("官方音乐列表为 null，游戏可能还在加载。");
                     return 0;
                 }
 
                 int added = 0;
+                int total = 0;
                 foreach (object item in list)
                 {
+                    total++;
                     if (item == null) continue;
                     AddClip(library, item, ref added);
                 }
 
-                if (added > 0)
+                if (total == 0)
                 {
-                    Plugin.LogInfo(string.Format("已导入 {0} 首游戏自带音乐", added));
+                    Plugin.LogWarn("官方音乐列表为空，游戏可能还没加载完。点一次“重新扫描”即可。");
+                }
+                else if (added > 0)
+                {
+                    Plugin.LogInfo(string.Format("已导入 {0} 首游戏自带音乐（列表共 {1} 项）",
+                        added, total));
+                }
+                else
+                {
+                    Plugin.LogWarn(string.Format(
+                        "官方音乐列表有 {0} 项但未能导入，字段名可能已变化。", total));
                 }
                 return added;
             }
@@ -315,13 +340,19 @@ namespace SeaPowerDynamicMusic
                 var clipField = AccessTools.Field(type, "_clip");
                 var nameField = AccessTools.Field(type, "_name");
                 var sideField = AccessTools.Field(type, "_side");
+
                 if (clipField == null || nameField == null || sideField == null)
                 {
+                    Plugin.Verbose("MusicClipData 字段缺失: " + type.FullName);
                     return;
                 }
 
                 var clip = clipField.GetValue(clipData) as AudioClip;
-                if (clip == null) return;
+                if (clip == null)
+                {
+                    Plugin.Verbose("官方条目没有音频数据: " + type.FullName);
+                    return;
+                }
 
                 string rawName = nameField.GetValue(clipData) as string;
                 string side = sideField.GetValue(clipData) as string;
@@ -338,10 +369,11 @@ namespace SeaPowerDynamicMusic
 
                 library.AddOfficial(track);
                 added++;
+                Plugin.Verbose("导入官方曲目: " + display);
             }
-            catch
+            catch (Exception e)
             {
-                // 单个条目读不出来就跳过，不影响其它音乐
+                Plugin.Verbose("读取官方条目失败: " + e.Message);
             }
         }
 
@@ -374,7 +406,7 @@ namespace SeaPowerDynamicMusic
     /// <summary>全局运行期设置。由配置文件和游戏内界面共同维护。</summary>
     public class MusicSettings
     {
-        public float Volume = 0.8f;
+        public float Volume = 0.5f;
         public float FadeSeconds = 2.0f;
         public bool Shuffle = true;
         public bool ReplaceVanilla = true;
