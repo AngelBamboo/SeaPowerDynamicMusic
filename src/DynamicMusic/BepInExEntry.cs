@@ -12,7 +12,7 @@ namespace SeaPowerDynamicMusic
     {
         private void Awake()
         {
-            Plugin.Initialise(Logger, null);
+            Plugin.Initialise(Logger);
         }
     }
 }

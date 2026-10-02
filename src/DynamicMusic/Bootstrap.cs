@@ -43,11 +43,7 @@ namespace SeaPowerDynamicMusic
         /// 由任一入口调用。
         /// </summary>
         /// <param name="logger">日志源，可为空。</param>
-        /// <param name="userConfigPath">
-        /// Anchor Chain 交过来的用户配置文件路径。手动安装时为空，
-        /// 此时自行在 BepInEx 配置目录建立一份。
-        /// </param>
-        public static void Initialise(ManualLogSource logger, string userConfigPath)
+        public static void Initialise(ManualLogSource logger)
         {
             if (System.Threading.Interlocked.Exchange(ref _initialised, 1) == 1)
             {
@@ -59,7 +55,7 @@ namespace SeaPowerDynamicMusic
 
             try
             {
-                if (!PrepareConfig(userConfigPath)) return;
+                if (!PrepareConfig()) return;
                 ModConfig.Load(IniFile.Load(ModConfig.UserConfigPath));
             }
             catch (Exception e)
@@ -95,54 +91,59 @@ namespace SeaPowerDynamicMusic
             LogInfo(string.Format("{0} v{1} 已加载", Name, Version));
         }
 
-        /// <summary>供 BepInEx 入口使用的重载。</summary>
-        public static void Initialise(ManualLogSource logger)
-        {
-            Initialise(logger, null);
-        }
-
         /// <summary>
-        /// 确定用户配置文件位置。Anchor Chain 已经建好就直接用，
-        /// 否则自己在 BepInEx 配置目录建一份，并从模组目录复制参考配置。
+        /// 确定用户配置文件位置。放在 StreamingAssets\ACConfigs\ 下，
+        /// 与 Anchor Chain 社区约定的一致，即便不走它的配置功能，
+        /// 用户也能在熟悉的位置找到配置。
+        ///
+        /// 首次运行时从模组目录复制参考配置，之后每次启动用参考文件
+        /// 补齐用户文件里缺失的节和键，但不覆盖已有取值。
         /// </summary>
-        private static bool PrepareConfig(string userConfigPath)
+        private static bool PrepareConfig()
         {
-            if (!string.IsNullOrEmpty(userConfigPath) && File.Exists(userConfigPath))
-            {
-                ModConfig.UserConfigPath = userConfigPath;
-                return true;
-            }
-
-            // Anchor Chain 模式下如果没拿到路径，说明配置还没生成，
-            // 这里不自行创建，避免和 Anchor Chain 的 ACConfigs 目录产生两份配置。
-            if (!string.IsNullOrEmpty(userConfigPath))
-            {
-                LogError("Anchor Chain 提供的配置文件不存在: " + userConfigPath);
-                return false;
-            }
-
             try
             {
-                string dir = BepInEx.Paths.ConfigPath;
-                string path = Path.Combine(dir, Guid + ".ini");
+                string dir = Path.Combine(UnityEngine.Application.dataPath, "StreamingAssets",
+                    "ACConfigs");
+                Directory.CreateDirectory(dir);
 
-                if (!File.Exists(path))
+                string userPath = Path.Combine(dir, Guid + "_user.ini");
+                string reference = FindReferenceConfig();
+
+                if (File.Exists(userPath))
                 {
-                    string reference = FindReferenceConfig();
+                    // 已有用户配置，只补齐缺失项
                     if (!string.IsNullOrEmpty(reference))
                     {
-                        File.Copy(reference, path, true);
-                        LogInfo("已从模组目录复制参考配置: " + path);
-                    }
-                    else
-                    {
-                        File.WriteAllText(path, ModConfig.BuildDefaultConfig(),
-                            new System.Text.UTF8Encoding(false));
-                        LogInfo("已生成默认配置: " + path);
+                        try
+                        {
+                            var userIni = IniFile.Load(userPath);
+                            var defaults = IniFile.Load(reference);
+                            if (userIni.BackfillFrom(defaults))
+                            {
+                                userIni.Save(userPath);
+                                Plugin.LogInfo("已按参考配置补齐缺失的选项");
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            LogWarn("补齐配置时出错: " + ex.Message);
+                        }
                     }
                 }
+                else if (!string.IsNullOrEmpty(reference))
+                {
+                    File.Copy(reference, userPath, true);
+                    LogInfo("已创建用户配置: " + userPath);
+                }
+                else
+                {
+                    File.WriteAllText(userPath, ModConfig.BuildDefaultConfig(),
+                        new System.Text.UTF8Encoding(false));
+                    LogInfo("已生成默认配置: " + userPath);
+                }
 
-                ModConfig.UserConfigPath = path;
+                ModConfig.UserConfigPath = userPath;
                 return true;
             }
             catch (Exception e)

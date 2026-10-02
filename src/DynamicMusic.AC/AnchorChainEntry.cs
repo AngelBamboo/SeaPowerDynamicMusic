@@ -15,16 +15,17 @@ namespace SeaPowerDynamicMusic.Bridge
     ///   → 从 GetExportedTypes() 里挑出实现了 IAnchorChainMod 的类型
     ///   → 读 ACPlugin 特性拿元数据 → 满足依赖后调用 TriggerEntryPoint()
     ///
-    /// [ACConfig] 告诉 Anchor Chain 本模组使用配置文件。它会在首次运行时把模组目录里的
-    /// &lt;GUID&gt;.ini 复制到 StreamingAssets\ACConfigs\&lt;GUID&gt;_user.ini，
-    /// 之后每次启动都用参考文件补齐用户文件里缺失的节和键。
-    /// 这也是官方推荐的配置存放方式，用户改配置不会被模组更新覆盖。
+    /// 刻意不加 [ACConfig]。Anchor Chain 1.1.0 在处理配置时会调用
+    /// SeaPower.IniHandler.open(string,bool,bool)，而 Sea Power 0.8.3 里这个方法
+    /// 实际有五个参数，签名对不上会抛 MissingMethodException，
+    /// 异常发生在遍历 dll 的循环里，会让本模组注册失败。
+    /// 配置文件改由核心程序集的 ModConfig 自行管理，位置仍放在
+    /// StreamingAssets\ACConfigs\ 下，与社区惯例一致。
     ///
     /// 本类不直接引用核心程序集的类型，全部用反射调用，
     /// 这样核心程序集被加载的先后顺序不会影响启动。
     /// </summary>
     [ACPlugin(PluginId, DisplayName, ModVersion)]
-    [ACConfig]
     public class AnchorChainEntry : IAnchorChainMod
     {
         /// <summary>
@@ -46,8 +47,6 @@ namespace SeaPowerDynamicMusic.Bridge
 
             try
             {
-                string userConfig = FindUserConfig();
-
                 Assembly core = FindCoreAssembly(log);
                 if (core == null) return;
 
@@ -59,29 +58,18 @@ namespace SeaPowerDynamicMusic.Bridge
                     return;
                 }
 
-                // 优先用带 userConfigPath 参数的重载，那是 Anchor Chain 模式的正规入口
+                // 核心自己管理配置文件，这里只需要把日志源传过去
                 MethodInfo init = entry.GetMethod(InitMethodName,
                     BindingFlags.Public | BindingFlags.Static, null,
-                    new[] { typeof(ManualLogSource), typeof(string) }, null);
+                    new[] { typeof(ManualLogSource) }, null);
 
-                if (init != null)
+                if (init == null)
                 {
-                    init.Invoke(null, new object[] { null, userConfig });
-                }
-                else
-                {
-                    MethodInfo fallback = entry.GetMethod(InitMethodName,
-                        BindingFlags.Public | BindingFlags.Static, null,
-                        new[] { typeof(ManualLogSource) }, null);
-                    if (fallback == null)
-                    {
-                        log.LogError("核心程序集缺少 Plugin.Initialise 入口。");
-                        return;
-                    }
-                    log.LogWarning("核心程序集只提供单参数入口，配置将不由 Anchor Chain 管理。");
-                    fallback.Invoke(null, new object[] { null });
+                    log.LogError("核心程序集缺少 Plugin.Initialise 入口。");
+                    return;
                 }
 
+                init.Invoke(null, new object[] { log });
                 log.LogInfo("已通过 Anchor Chain 启动动态音乐。");
             }
             catch (Exception e)
@@ -90,55 +78,6 @@ namespace SeaPowerDynamicMusic.Bridge
                     ? e.InnerException : e;
                 log.LogError("通过 Anchor Chain 启动失败: " + inner);
             }
-        }
-
-        /// <summary>
-        /// 按 Anchor Chain 的规则定位用户配置文件：
-        /// 优先 ACConfigs\&lt;GUID&gt;_user.ini，找不到再看模组目录里的 &lt;GUID&gt;_user.ini。
-        /// </summary>
-        private string FindUserConfig()
-        {
-            string fileName = PluginId + "_user.ini";
-
-            string streamingAssets = ResolveStreamingAssetsPath();
-            if (!string.IsNullOrEmpty(streamingAssets))
-            {
-                string acConfigs = Path.Combine(streamingAssets, "ACConfigs");
-                if (Directory.Exists(acConfigs))
-                {
-                    foreach (string f in Directory.GetFiles(acConfigs, fileName,
-                                 SearchOption.AllDirectories))
-                    {
-                        return f;
-                    }
-                }
-            }
-
-            string selfDir = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);
-            if (!string.IsNullOrEmpty(selfDir))
-            {
-                string local = Path.Combine(selfDir, fileName);
-                if (File.Exists(local)) return local;
-            }
-
-            return null;
-        }
-
-        private static string ResolveStreamingAssetsPath()
-        {
-            // 游戏的 StreamingAssets 位于 <Sea Power>\Sea Power_Data\StreamingAssets
-            string dataPath = null;
-            try
-            {
-                dataPath = UnityEngine.Application.dataPath;
-            }
-            catch
-            {
-                // 取不到就返回空，核心程序集会走自己的兜底逻辑
-            }
-
-            if (string.IsNullOrEmpty(dataPath)) return null;
-            return Path.Combine(dataPath, "StreamingAssets");
         }
 
         /// <summary>

@@ -134,17 +134,31 @@ namespace SeaPowerDynamicMusic
             File.WriteAllText(path, sb.ToString(), new UTF8Encoding(false));
         }
 
-        /// <summary>从默认配置补齐缺失的节与键，不覆盖用户已有取值。</summary>
-        public void BackfillFrom(IniFile defaults)
+        /// <summary>
+        /// 从默认配置补齐缺失的节与键，不覆盖用户已有取值。
+        /// 模拟 Anchor Chain 的 ACConfig 行为。返回 true 表示有新增。
+        /// </summary>
+        public bool BackfillFrom(IniFile defaults)
         {
+            if (defaults == null) return false;
+
+            bool changed = false;
             foreach (var sec in defaults._sections)
             {
+                bool isNew = !_sections.ContainsKey(sec.Key);
                 var target = EnsureSection(sec.Key);
+                if (isNew) changed = true;
+
                 foreach (var kv in sec.Value)
                 {
-                    if (!target.ContainsKey(kv.Key)) target[kv.Key] = kv.Value;
+                    if (!target.ContainsKey(kv.Key))
+                    {
+                        target[kv.Key] = kv.Value;
+                        changed = true;
+                    }
                 }
             }
+            return changed;
         }
 
         /// <summary>取某个节下的全部键值对，节不存在时返回空字典。</summary>
