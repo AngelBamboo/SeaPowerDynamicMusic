@@ -112,12 +112,17 @@ namespace SeaPowerDynamicMusic
         {
             if (!_visible) return;
 
-            // depth 越小越靠上层，必须压过游戏自己的 IMGUI，
-            // 否则面板画在游戏界面之下，鼠标事件也被它先吃掉。
+            // 游戏的输入系统会主动吞掉鼠标事件，IMGUI 收不到。
+            // 面板显示时把自己伪装成「正在输入文本」，
+            // 游戏 InputHandler.typingActive 为真时就不处理鼠标，
+            // 这样点击才会落到面板上而不是穿透到游戏界面。
+            InputFocusGuard.SetTyping(_visible);
+
+            // depth 越小越靠上层，必须压过游戏自己的 IMGUI
             GUI.depth = -1000;
 
-            // 面板外点击不关闭，避免误触；也不必消费，交由游戏处理
-            Event current = Event.current;
+            // 面板外点击不处理，也不关闭，避免误触
+            var current = Event.current;
             if (current != null && current.type == EventType.MouseDown
                 && !_window.Contains(current.mousePosition))
             {
@@ -128,10 +133,8 @@ namespace SeaPowerDynamicMusic
             _window = GUILayout.Window(0x5EA10, _window, DrawWindow,
                 "动态音乐  Dynamic Music", _windowStyle);
 
-            // 关键：窗口处理完之后把鼠标事件标记为已使用，
-            // 这样同一次点击不会再传给游戏的 Noesis 界面，
-            // 表现为点面板没反应却点到了游戏自己的按钮。
-            // 必须在 Window 之后做，提前 Use 会让控件收不到事件。
+            // 窗口处理完之后才吃掉事件，阻止它继续传给游戏界面。
+            // 顺序不能颠倒，提前 Use 会让控件收不到事件。
             var e = Event.current;
             if (e != null && e.isMouse) e.Use();
         }

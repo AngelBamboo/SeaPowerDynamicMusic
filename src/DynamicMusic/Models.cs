@@ -249,6 +249,35 @@ namespace SeaPowerDynamicMusic
     /// </summary>
     public static class OfficialMusic
     {
+        /// <summary>
+        /// 探测游戏的官方音乐是否已加载完。
+        /// 只判断「列表存在且有元素」，不真正导入，避免重复开销。
+        /// </summary>
+        public static bool HasOfficialMusic()
+        {
+            try
+            {
+                Type mmType = AccessTools.TypeByName("SeaPower.MusicManager");
+                if (mmType == null || mmType.BaseType == null) return false;
+
+                var getter = AccessTools.Method(mmType.BaseType, "get_Instance");
+                if (getter == null) return false;
+
+                object manager = getter.Invoke(null, null);
+                if (manager == null) return false;
+
+                var clipsField = AccessTools.Field(mmType, "_allClips");
+                if (clipsField == null) return false;
+
+                var list = clipsField.GetValue(manager) as System.Collections.ICollection;
+                return list != null && list.Count > 0;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
         /// <summary>把游戏自带音乐导入音乐库。游戏尚未加载完时返回 0。</summary>
         public static int Import(MusicLibrary library)
         {

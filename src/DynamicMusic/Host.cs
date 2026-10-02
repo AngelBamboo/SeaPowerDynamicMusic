@@ -20,10 +20,21 @@ namespace SeaPowerDynamicMusic
         private MusicPanel _panel;
         private bool _rescanning;
 
+        private void OnDestroy()
+        {
+            // 场景切换时如果面板正开着，务必把输入焦点还给游戏，
+            // 否则玩家回到游戏里会点不动任何东西。
+            InputFocusGuard.Release();
+        }
+
         private IEnumerator Start()
         {
             // 等游戏完成自身初始化，避免和加载流程抢资源
             yield return new WaitForSecondsRealtime(2f);
+
+            // 官方音乐由游戏从 AssetBundle 加载，时机不确定，
+            // 这里轮询等待它就绪，最多等 30 秒，避免首次扫描扑空。
+            yield return WaitForOfficialMusic();
 
             Settings = ModConfig.Settings;
             Library = new MusicLibrary();
@@ -74,6 +85,45 @@ namespace SeaPowerDynamicMusic
             {
                 Plugin.LogInfo(string.Format("按 {0} 呼出音乐管理面板。", ModConfig.PanelKey));
             }
+        }
+
+        /// <summary>
+        /// 等游戏把官方音乐加载完。官方曲目存在 MusicManager._allClips 里，
+        /// 由游戏自己从 AssetBundle 读入，时机比模组启动晚得多。
+        /// 最多等待 30 秒，超时后按现状继续，不阻塞后续流程。
+        /// </summary>
+        private static IEnumerator WaitForOfficialMusic()
+        {
+            const float maxWait = 30f;
+            float start = Time.realtimeSinceStartup;
+            int warned = 0;
+
+            while (Time.realtimeSinceStartup - start < maxWait)
+            {
+                if (OfficialMusic.HasOfficialMusic())
+                {
+                    if (Time.realtimeSinceStartup - start > 1f)
+                    {
+                        Plugin.LogInfo(string.Format(
+                            "游戏自带音乐已就绪，等待 {0:F1} 秒",
+                            Time.realtimeSinceStartup - start));
+                    }
+                    yield break;
+                }
+
+                // 每 5 秒提示一次，让玩家知道在等什么
+                if (warned == 0 && Time.realtimeSinceStartup - start > 5f)
+                {
+                    Plugin.LogInfo("等待游戏加载自带音乐…");
+                    warned++;
+                }
+
+                yield return new WaitForSecondsRealtime(0.5f);
+            }
+
+            Plugin.LogWarn(string.Format(
+                "等待 {0:F0} 秒后游戏自带音乐仍未就绪，将只使用你自己的曲子。" +
+                "之后在面板点一次“重新扫描”通常就能补上。", maxWait));
         }
 
         private static void WarnEmptyLibrary()
