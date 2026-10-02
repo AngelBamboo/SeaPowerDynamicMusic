@@ -168,6 +168,14 @@ namespace SeaPowerDynamicMusic
 
             MusicScene want = EvaluateScene();
 
+            // 当前曲子若也属于目标场景，就让它继续播，不打断。
+            // 这样同一首曲子归入多个场景时，场景变化不会突兀地换歌。
+            if (want != _currentScene && CurrentTrackFits(want))
+            {
+                _currentScene = want;
+                Plugin.Verbose(string.Format("当前曲目也适用于 {0}，保持播放", want));
+            }
+
             bool changed = want != _currentScene;
             bool cooldownPassed = Time.unscaledTime - _lastSwitchTime
                                   >= _settings.SceneSwitchCooldown;
@@ -181,6 +189,18 @@ namespace SeaPowerDynamicMusic
             }
 
             AutoAdvance();
+        }
+
+        /// <summary>
+        /// 正在播放的曲目是否适用于指定场景。
+        /// 要同时满足：仍在播放、已加载、未被停用、且该场景包含它。
+        /// </summary>
+        private bool CurrentTrackFits(MusicScene scene)
+        {
+            MusicTrack cur = _player != null ? _player.CurrentTrack : null;
+            if (cur == null || !cur.IsLoaded || cur.Excluded) return false;
+            if (!_settings.IncludeOfficial && cur.Official) return false;
+            return cur.BelongsTo(scene);
         }
 
         /// <summary>决定此刻应当播放的分类。</summary>
