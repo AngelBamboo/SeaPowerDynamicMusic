@@ -109,19 +109,16 @@ namespace SeaPowerDynamicMusic
         }
 
         /// <summary>
-        /// 换算到 IMGUI 坐标系。
+        /// 换算到 IMGUI 坐标系（左下原点，y 向上为正）。
         ///
-        /// Input System 的 y 原点已经在下方，与 IMGUI 一致，不该翻转。
-        /// 但实测它报的 y 与 IMGUI 坐标存在偏移（可能是渲染分辨率与
-        /// 输入分辨率不一致），因此这里不做任何假设，改为运行时校准。
+        /// 实测这个游戏的 Input System 报出来的 y 是「从屏幕顶部往下」，
+        /// 与 IMGUI 的约定相反，直接用会导致上下颠倒。
+        /// 旧 Input 本来就是这个方向，同样需要翻转。
+        /// 所以两条路径统一用 Screen.height - y 翻转。
         /// </summary>
         private static Vector2 ToGui(Vector2 raw)
         {
-            if (Source == "旧 Input")
-            {
-                return new Vector2(raw.x, Screen.height - raw.y);
-            }
-            return raw;
+            return new Vector2(raw.x, Screen.height - raw.y);
         }
 
         /// <summary>
@@ -147,6 +144,25 @@ namespace SeaPowerDynamicMusic
             float guiY = ToGui(raw).y;
             YOffset = TitleBarGuiY - guiY;
             YCalibrated = true;
+        }
+
+        /// <summary>
+        /// 判断是否需要沿用历史校准值。
+        ///
+        /// Y 方向修正后理论偏移应为 0，此时若继续叠加旧的校准值反而会错。
+        /// 所以偏移大到接近整屏时视为「旧校准值失效」，自动丢弃。
+        /// </summary>
+        internal static void DropStaleCalibration()
+        {
+            if (!YCalibrated) return;
+
+            if (Mathf.Abs(YOffset) > Screen.height * 0.5f)
+            {
+                Plugin.Verbose(string.Format(
+                    "丢弃失效的 Y 校准值 {0:F0}（已改为统一翻转方向）", YOffset));
+                YOffset = 0f;
+                YCalibrated = false;
+            }
         }
 
         /// <summary>左键是否按住。</summary>

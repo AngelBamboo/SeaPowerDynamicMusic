@@ -50,6 +50,7 @@ namespace SeaPowerDynamicMusic
             // 按键边沿必须在 Update 里刷新，Unity 每帧只调一次。
             // 放在 OnGUI 里会被多次调用消耗掉，导致点击永远不触发。
             MouseInput.BeginFrame();
+            MouseInput.DropStaleCalibration();
 
             if (Time.frameCount != _lastUpdateFrame)
             {
@@ -411,7 +412,8 @@ namespace SeaPowerDynamicMusic
             string label = (t.Official ? "[官方] " : "") + t.DisplayName;
             if (isCurrent) label = "▶ " + label;
 
-            var playBtn = new Rect(x, y, 250f, 22f);
+            var playBtn = new Rect(x, y, 330f, 22f);
+            label = UI.Ellipsis(label, 322f);
             if (UI.Click(playBtn, label, t.IsLoaded))
             {
                 if (t.IsLoaded)
@@ -427,7 +429,7 @@ namespace SeaPowerDynamicMusic
             }
 
             // 启用开关
-            var toggle = new Rect(x + 256f, y, 20f, 22f);
+            var toggle = new Rect(x + 336f, y, 20f, 22f);
             bool on = !t.Excluded && t.Weight > 0f;
             if (MouseInput.Contains(toggle) && MouseInput.Released)
             {
@@ -439,30 +441,30 @@ namespace SeaPowerDynamicMusic
             UI.Label(toggle, on ? "☑" : "☐", false, !on, false, TextAnchor.MiddleCenter);
 
             // 权重
-            UI.Label(new Rect(x + 280f, y, 28f, 22f), "权重", false, true);
-            var wSlider = new Rect(x + 308f, y + 6f, 68f, 10f);
+            UI.Label(new Rect(x + 360f, y, 28f, 22f), "权重", false, true);
+            var wSlider = new Rect(x + 388f, y + 6f, 68f, 10f);
             if (UI.Slider(wSlider, t.Weight, 0f, 3f))
             {
                 t.Weight = UI.ValueFromDrag(wSlider, 0f, 3f);
             }
-            UI.Label(new Rect(x + 380f, y, 30f, 22f), t.Weight.ToString("0.0"), false, true);
+            UI.Label(new Rect(x + 460f, y, 30f, 22f), t.Weight.ToString("0.0"), false, true);
 
             // 优先级
-            UI.Label(new Rect(x + 414f, y, 28f, 22f), "优先", false, true);
-            var pSlider = new Rect(x + 442f, y + 6f, 58f, 10f);
+            UI.Label(new Rect(x + 494f, y, 28f, 22f), "优先", false, true);
+            var pSlider = new Rect(x + 522f, y + 6f, 58f, 10f);
             if (UI.Slider(pSlider, t.Priority, 0f, 5f))
             {
                 t.Priority = Mathf.RoundToInt(UI.ValueFromDrag(pSlider, 0f, 5f));
             }
-            UI.Label(new Rect(x + 504f, y, 20f, 22f), t.Priority.ToString(), false, true);
+            UI.Label(new Rect(x + 584f, y, 20f, 22f), t.Priority.ToString(), false, true);
 
             // 时长
             if (t.IsLoaded)
-                UI.Label(new Rect(x + 528f, y, 44f, 22f), FormatDuration(t.Duration), false, true);
+                UI.Label(new Rect(x + 608f, y, 44f, 22f), FormatDuration(t.Duration), false, true);
             else if (t.LoadFailed)
-                UI.Label(new Rect(x + 528f, y, 44f, 22f), "失败", false, false, true);
+                UI.Label(new Rect(x + 608f, y, 44f, 22f), "失败", false, false, true);
             else
-                UI.Label(new Rect(x + 528f, y, 44f, 22f), "待载", false, true);
+                UI.Label(new Rect(x + 608f, y, 44f, 22f), "待载", false, true);
 
             DrawSceneToggles(t, new Rect(r.x + 4f, r.y + 30f, r.width - 8f, 22f));
         }
@@ -541,12 +543,14 @@ namespace SeaPowerDynamicMusic
             x += 100f;
 
             // 鼠标穿透：开启后点击会同时作用于游戏界面，方便边看面板边操作
-            if (UI.Checkbox(new Rect(x, y, 92f, 20f), _mousePassthrough, "鼠标穿透"))
+            var pass = new Rect(x, y, 92f, 20f);
+            bool passChanged = UI.Checkbox(pass, _mousePassthrough, "鼠标穿透");
+            if (passChanged)
             {
                 _mousePassthrough = !_mousePassthrough;
-                SetStatus(_mousePassthrough
-                    ? "已开启鼠标穿透，点击会同时作用于游戏"
-                    : "已关闭鼠标穿透，点击只作用于本面板");
+                // 状态常驻在勾选框上，不需要靠提示文字维持
+                _status = "";
+                _statusUntil = 0f;
             }
 
             float bw = 74f;

@@ -67,6 +67,29 @@ namespace SeaPowerDynamicMusic
             GUI.color = old;
         }
 
+
+        /// <summary>
+        /// 按可用宽度截断文字，超出部分用省略号。
+        /// 优先保留开头，文件名开头通常是主信息。
+        /// </summary>
+        internal static string Ellipsis(string text, float width)
+        {
+            if (string.IsNullOrEmpty(text)) return text;
+
+            var style = new GUIStyle(_label) { clipping = TextClipping.Clip };
+            // 中文按 12 像素宽估，英文按 6.5 像素宽估
+            float w = 0f;
+            int i = 0;
+            for (; i < text.Length; i++)
+            {
+                w += text[i] > 127 ? 12f : 6.5f;
+                if (w > width) break;
+            }
+
+            if (i >= text.Length) return text;
+            return text.Substring(0, Math.Max(0, i - 1)) + "…";
+        }
+
         internal static void Label(Rect r, string text, bool bold = false, bool dim = false,
                                   bool warn = false, TextAnchor align = TextAnchor.MiddleLeft)
         {
@@ -184,7 +207,9 @@ namespace SeaPowerDynamicMusic
                 r.width - boxSize - 5f, r.height);
             Label(textRect, text, false, !value);
 
-            return MouseInput.Contains(r) && (MouseInput.Pressed || MouseInput.Released);
+            // 只认「按下」。若按下和松开都算，一次点击会翻转两次，
+            // 表现为方框闪一下又变回原样。
+            return MouseInput.Contains(r) && MouseInput.Pressed;
         }
     }
 }
