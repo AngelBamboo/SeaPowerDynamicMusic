@@ -1,0 +1,45 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    AnchorChain 桥接程序集。
+    单独拆出来的原因：它必须实现 AnchorChain.IAnchorChainMod 接口，
+    因而硬依赖 AnchorChain.dll。核心程序集保持零外部依赖，
+    这样把手动安装到 BepInEx\plugins 的玩家不受影响。
+  -->
+  <PropertyGroup>
+    <TargetFramework>netstandard2.1</TargetFramework>
+    <AssemblyName>SeaPowerDynamicMusic.AC</AssemblyName>
+    <RootNamespace>SeaPowerDynamicMusic.Bridge</RootNamespace>
+    <Version>0.1.0</Version>
+    <LangVersion>latest</LangVersion>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <DebugType>none</DebugType>
+    <NoWarn>$(NoWarn);CS0436</NoWarn>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <GameDir Condition="'$(GameDir)' == ''">F:\Steam\steamapps\common\Sea Power</GameDir>
+    <BepInExCore>$(GameDir)\BepInEx\core</BepInExCore>
+    <GameManaged>$(GameDir)\Sea Power_Data\Managed</GameManaged>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Reference Include="AnchorChain">
+      <HintPath>..\..\lib\AnchorChain.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="BepInEx">
+      <HintPath>$(BepInExCore)\BepInEx.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="UnityEngine">
+      <HintPath>$(GameManaged)\UnityEngine.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="UnityEngine.CoreModule">
+      <HintPath>$(GameManaged)\UnityEngine.CoreModule.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,28 @@
+# 构建产物
+bin/
+obj/
+build/
+dist/
+
+# 从游戏里复制来的第三方程序集，不进版本库
+# 需要时从 AnchorChain 的 dev.zip 里取
+lib/*.dll
+
+# 编辑器与系统文件
+.vs/
+.vscode/
+.idea/
+*.user
+*.suo
+*.userprefs
+
+# 打包时产生的模组副本
+mod/
+*.zip
+
+# 音频资源不进版本库，体积大且有版权问题
+*.mp3
+*.ogg
+*.wav
+*.aiff
+*.aif
