@@ -44,6 +44,10 @@ namespace SeaPowerDynamicMusic
 
         private void Update()
         {
+            // 按键边沿必须在 Update 里刷新，Unity 每帧只调一次。
+            // 放在 OnGUI 里会被多次调用消耗掉，导致点击永远不触发。
+            MouseInput.BeginFrame();
+
             if (HotkeyPressed()) _visible = !_visible;
         }
 
@@ -90,7 +94,6 @@ namespace SeaPowerDynamicMusic
 
             GUI.depth = -1000;
             UI.EnsureStyles();
-            MouseInput.BeginFrame();
             UI.BeginFrame();
 
             // 拖动窗口：按住标题栏即可移动
@@ -483,12 +486,15 @@ namespace SeaPowerDynamicMusic
                         ModConfig.PanelKey), false, true);
 
                 // 诊断信息：点击一直不生效时，用它确认鼠标到底读没读到
-                UI.Label(new Rect(_window.x + 490f, y + 20f, _window.width - 502f, 18f),
-                    string.Format("输入 {0} | 屏幕 {1}x{2} | 鼠标 {3:F0},{4:F0} | 按下 {5}",
+                UI.Label(new Rect(_window.x + 470f, y + 20f, _window.width - 482f, 18f),
+                    string.Format("{0} | 屏幕 {1}x{2} | 鼠标 {3:F0},{4:F0} | 按下 {5} 边沿 {6}",
                         MouseInput.DeviceFound ? MouseInput.Source : "无设备",
                         Screen.width, Screen.height,
                         MouseInput.GuiPosition.x, MouseInput.GuiPosition.y,
-                        MouseInput.RawHeld ? "是" : "否"),
+                        MouseInput.RawHeld ? "是" : "否",
+                        (MouseInput.RawPressed ? "按下" : "") +
+                        (MouseInput.RawReleased ? "松开" : "") == string.Empty
+                            ? "无" : (MouseInput.RawPressed ? "按下" : "松开")),
                     false, true, !MouseInput.DeviceFound);
             }
         }

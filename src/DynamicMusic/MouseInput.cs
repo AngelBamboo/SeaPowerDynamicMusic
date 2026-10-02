@@ -18,8 +18,12 @@ namespace SeaPowerDynamicMusic
         /// <summary>面板需要独占鼠标，避免游戏同时响应。</summary>
         internal static bool SuppressGameInput;
 
-        private static int _lastClickFrame = -1;
-        private static bool _pressedLastFrame;
+        // ---- 按键边沿，由 Update 每帧刷新一次 ----
+        private static bool _prevHeld;
+        private static bool _curHeld;
+        private static bool _pressedEdge;
+        private static bool _releasedEdge;
+        private static int _edgeFrame = -1;
 
         // ---- 诊断信息，面板底部会显示 ----
 
@@ -150,31 +154,16 @@ namespace SeaPowerDynamicMusic
             }
         }
 
-        /// <summary>本帧左键刚按下（只触发一次）。</summary>
+        /// <summary>本帧左键刚按下（边沿，只在该帧成立）。</summary>
         internal static bool Pressed
         {
-            get
-            {
-                bool now = ReadHeld();
-                RawHeld = now;
-                bool pressed = now && !_pressedLastFrame;
-                RawPressed = pressed;
-                _pressedLastFrame = now;
-                return pressed;
-            }
+            get { return _pressedEdge; }
         }
 
-        /// <summary>本帧左键刚松开。</summary>
+        /// <summary>本帧左键刚松开（边沿，只在该帧成立）。</summary>
         internal static bool Released
         {
-            get
-            {
-                bool now = ReadHeld();
-                RawHeld = now;
-                bool released = !now && _pressedLastFrame;
-                RawReleased = released;
-                return released;
-            }
+            get { return _releasedEdge; }
         }
 
         /// <summary>滚轮增量，本帧累计。</summary>
@@ -217,12 +206,38 @@ namespace SeaPowerDynamicMusic
             }
         }
 
-        /// <summary>重置每帧状态，必须在面板开始绘制时调用一次。</summary>
+        /// <summary>
+        /// 刷新按键边沿。必须在 Update 里调用，Unity 每帧只调一次。
+        ///
+        /// 不能放在 OnGUI 里：OnGUI 每帧会被调用多次
+        /// （Layout / Repaint / Input 各一次），边沿在第一次调用时
+        /// 就被消耗掉，导致 Pressed 和 Released 永远不成立。
+        /// 而且 OnGUI 不是每帧都调，快速点击会被整个漏掉。
+        /// </summary>
         internal static void BeginFrame()
         {
-            // 读一次 Held 保持 _pressedLastFrame 与实际状态同步
-            bool now = Held;
-            _pressedLastFrame = now;
+            _prevHeld = _curHeld;
+            _curHeld = ReadHeld();
+
+            _pressedEdge = _curHeld && !_prevHeld;
+            _releasedEdge = !_curHeld && _prevHeld;
+
+            // 边沿只在该帧成立，Update 之后即失效
+            _edgeFrame = Time.frameCount;
+
+            RawHeld = _curHeld;
+            RawPressed = _pressedEdge;
+            RawReleased = _releasedEdge;
+
+            // 位置每帧刷新，供 OnGUI 使用
+            RawPosition = ReadRaw();
+            GuiPosition = ToGui(RawPosition);
+        }
+
+        /// <summary>当前帧的边沿是否仍然有效，供 OnGUI 判断要不要沿用缓存。</summary>
+        internal static bool EdgeValid
+        {
+            get { return _edgeFrame == Time.frameCount; }
         }
 
         internal static bool Contains(Rect rect)
