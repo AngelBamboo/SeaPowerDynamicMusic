@@ -21,6 +21,7 @@ namespace SeaPowerDynamicMusic
     {
         private bool _visible;
         private float _trackScroll;
+        private static bool _barDragging;
         private SceneGroup _group = SceneGroup.Mission;
         private MusicScene _scene = MusicScene.Cruise;
         private string _status = "";
@@ -267,13 +268,14 @@ namespace SeaPowerDynamicMusic
 
             float y = area.y + 20f;
             foreach (SceneGroup g in new[] { SceneGroup.Interface, SceneGroup.Mission,
-                                            SceneGroup.Result })
+                                            SceneGroup.Result, SceneGroup.Other })
             {
                 int n = 0;
                 foreach (MusicScene s in SceneInfo.ScenesIn(g)) n += lib.GetTracks(s).Count;
 
                 var r = new Rect(area.x, y, area.width - 30f, 26f);
-                if (g == _group) UI.Fill(r, UI.RowActive);
+                // 一级分类用更明显的底色区分层级
+                UI.Fill(r, g == _group ? UI.RowActive : new Color(1f, 1f, 1f, 0.10f));
 
                 if (UI.Click(r, SceneInfo.GroupName(g)))
                 {
@@ -301,7 +303,7 @@ namespace SeaPowerDynamicMusic
             {
                 int n = lib.GetTracks(s).Count;
                 var r = new Rect(area.x, y, area.width - 30f, 26f);
-                if (s == _scene) UI.Fill(r, UI.RowActive);
+                UI.Fill(r, s == _scene ? UI.RowActive : new Color(0f, 0f, 0f, 0.30f));
 
                 if (UI.Click(r, SceneInfo.SceneName(s)))
                 {
@@ -347,17 +349,43 @@ namespace SeaPowerDynamicMusic
             float contentH = tracks.Count * rowH;
             if (contentH > listH)
             {
-                if (MouseInput.Contains(listRect))
+                float maxScroll = contentH - listH;
+
+                // 滚轮
+                if (MouseInput.Contains(listRect) && MouseInput.ScrollDelta != 0f)
                 {
-                    _trackScroll = Mathf.Clamp(_trackScroll + MouseInput.ScrollDelta * 30f,
-                        0f, contentH - listH);
+                    _trackScroll = Mathf.Clamp(
+                        _trackScroll - MouseInput.ScrollDelta * 60f, 0f, maxScroll);
                 }
 
-                var bar = new Rect(area.xMax - 6f, listY, 5f, listH);
-                UI.Fill(bar, new Color(1f, 1f, 1f, 0.08f));
-                float barH = listH * (listH / contentH);
-                float barY = listY + (listH - barH) * (_trackScroll / (contentH - listH));
-                UI.Fill(new Rect(bar.x, barY, bar.width, barH), UI.Accent);
+                // 滚动条可拖动
+                var bar = new Rect(area.xMax - 7f, listY, 6f, listH);
+                float barH = Mathf.Max(24f, listH * (listH / contentH));
+                float barY = listY + (listH - barH) * (maxScroll > 0f
+                    ? _trackScroll / maxScroll : 0f);
+                var barRect = new Rect(bar.x, barY, bar.width, barH);
+
+                if (MouseInput.Contains(barRect) && MouseInput.Pressed)
+                {
+                    _barDragging = true;
+                }
+                else if (!MouseInput.Held)
+                {
+                    _barDragging = false;
+                }
+
+                if (_barDragging && MouseInput.Held)
+                {
+                    float t = Mathf.Clamp01((MouseInput.Position.y - listY - barH * 0.5f)
+                        / Mathf.Max(1f, listH - barH));
+                    _trackScroll = t * maxScroll;
+                    barY = listY + (listH - barH) * t;
+                    barRect = new Rect(bar.x, barY, bar.width, barH);
+                }
+
+                UI.Fill(bar, new Color(1f, 1f, 1f, 0.10f));
+                UI.Fill(barRect, _barDragging || MouseInput.Contains(barRect)
+                    ? new Color(0.45f, 0.82f, 1f, 1f) : UI.Accent);
             }
             else
             {
@@ -426,17 +454,17 @@ namespace SeaPowerDynamicMusic
                 }
             }
 
-            // 启用开关
-            var toggle = new Rect(x + 336f, y, 20f, 22f);
+            // 启用开关。必须走 ConsumeClick，否则 OnGUI 多调用会导致状态反复翻转
+            var toggle = new Rect(x + 336f, y, 22f, 22f);
             bool on = !t.Excluded && t.Weight > 0f;
-            if (MouseInput.Contains(toggle) && MouseInput.Released)
+            if (UI.Checkbox(toggle, on, ""))
             {
                 on = !on;
                 t.Excluded = !on;
-                t.Weight = on ? Mathf.Max(t.Weight, 0.1f) : 0f;
+                // 启用时给一个非零权重，否则调度器认为它不可用
+                t.Weight = on ? Mathf.Max(t.Weight, 0.5f) : 0f;
                 SetStatus((on ? "已启用 " : "已停用 ") + t.DisplayName);
             }
-            UI.Label(toggle, on ? "☑" : "☐", false, !on, false, TextAnchor.MiddleCenter);
 
             // 权重
             UI.Label(new Rect(x + 360f, y, 28f, 22f), "权重", false, true);
@@ -612,7 +640,8 @@ namespace SeaPowerDynamicMusic
         private void SaveAll(MusicLibrary lib, MusicSettings settings)
         {
             ModConfig.Settings = settings;
-            MusicDirector.WriteTrackSettingsToFile();
+            ModConfig.SaveUserConfig();
+            MusicDirector.TrySaveTrackSettings();
         }
 
         private void SetStatus(string msg)

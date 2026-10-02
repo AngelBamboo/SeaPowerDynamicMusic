@@ -212,21 +212,31 @@ namespace SeaPowerDynamicMusic
             get { return _releasedEdge; }
         }
 
-        /// <summary>滚轮增量，本帧累计。</summary>
+        /// <summary>
+        /// 滚轮增量。
+        ///
+        /// 必须在 Update 里取值并缓存：Input System 的状态每帧更新一次，
+        /// 到 OnGUI 时再读已经是被清零的值，滚轮会完全没反应。
+        /// </summary>
+        internal static float CachedScroll;
+
+        /// <summary>滚轮增量，本帧累计（读缓存值）。</summary>
         internal static float ScrollDelta
         {
-            get
+            get { return CachedScroll; }
+        }
+
+        private static float ReadScroll()
+        {
+            float v = 0f;
+            try
             {
-                float v = 0f;
-                try
-                {
-                    // 滚轮在 Mouse 上，Pointer 基类没有这个通道
-                    var m = Mouse.current;
-                    if (m != null) v += m.scroll.ReadValue().y / 120f;
-                }
-                catch { }
-                return v;
+                // 滚轮在 Mouse 上，Pointer 基类没有这个通道
+                var m = Mouse.current;
+                if (m != null) v += m.scroll.ReadValue().y / 120f;
             }
+            catch { }
+            return v;
         }
 
         /// <summary>拖动增量，本帧鼠标移动量。</summary>
@@ -278,6 +288,9 @@ namespace SeaPowerDynamicMusic
             // 位置每帧刷新，供 OnGUI 使用
             RawPosition = ReadRaw();
             GuiPosition = ToGui(RawPosition);
+
+            // 滚轮同样要在这里取值，OnGUI 时读已经清零
+            CachedScroll = ReadScroll();
         }
 
         /// <summary>当前帧的边沿是否仍然有效，供 OnGUI 判断要不要沿用缓存。</summary>

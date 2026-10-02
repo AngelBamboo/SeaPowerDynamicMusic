@@ -33,7 +33,12 @@ namespace SeaPowerDynamicMusic
         /// <summary>任务失败结算。</summary>
         Defeat,
         /// <summary>制作人员名单。</summary>
-        Credits
+        Credits,
+        /// <summary>
+        /// 未归类。仅用于面板显示：勾了它不会播放，
+        /// 但没勾任何分类的曲子会落在这里，不会凭空消失。
+        /// </summary>
+        Unassigned
     }
 
     /// <summary>面板一级分组。</summary>
@@ -44,7 +49,9 @@ namespace SeaPowerDynamicMusic
         /// <summary>战役音乐：平静巡航、发现敌情、交战。</summary>
         Mission,
         /// <summary>结算音乐：胜利、失败。</summary>
-        Result
+        Result,
+        /// <summary>未归类：不属于以上任何场景的曲子。</summary>
+        Other
     }
 
     public static class SceneInfo
@@ -61,6 +68,8 @@ namespace SeaPowerDynamicMusic
                 case MusicScene.Victory:
                 case MusicScene.Defeat:
                     return SceneGroup.Result;
+                case MusicScene.Unassigned:
+                    return SceneGroup.Other;
                 default:
                     return SceneGroup.Mission;
             }
@@ -72,6 +81,7 @@ namespace SeaPowerDynamicMusic
             {
                 case SceneGroup.Interface: return "界面音乐";
                 case SceneGroup.Result: return "结算音乐";
+                case SceneGroup.Other: return "未归类";
                 default: return "战役音乐";
             }
         }
@@ -88,6 +98,7 @@ namespace SeaPowerDynamicMusic
                 case MusicScene.Victory: return "胜利";
                 case MusicScene.Defeat: return "失败";
                 case MusicScene.Credits: return "制作名单";
+                case MusicScene.Unassigned: return "未归类";
                 default: return s.ToString();
             }
         }
@@ -101,6 +112,8 @@ namespace SeaPowerDynamicMusic
                     return new[] { MusicScene.MainMenu, MusicScene.StrategicMap, MusicScene.Credits };
                 case SceneGroup.Result:
                     return new[] { MusicScene.Victory, MusicScene.Defeat };
+                case SceneGroup.Other:
+                    return new[] { MusicScene.Unassigned };
                 default:
                     return new[] { MusicScene.Cruise, MusicScene.Tension, MusicScene.Combat };
             }
@@ -289,6 +302,32 @@ namespace SeaPowerDynamicMusic
         }
 
         /// <summary>
+        /// 取已加载的 bundle 实例。
+        /// AssetBundle.GetAllAssetNames() 不会触发加载，只列出名字，
+        /// 这里用它配合 LoadAllAssets 取出资源。
+        /// </summary>
+        private static UnityEngine.AssetBundle GetExistingBundle(string path)
+        {
+            if (!_loadedBundles.Contains(path)) return null;
+            try
+            {
+                // LoadFromFile 对已加载的 bundle 会返回现有实例或 null，
+                // 这里靠 Unity 内部的 bundle 表拿不到，改用标记 + 直接 LoadAllAssets。
+                // 保守做法：返回 null 让调用方走 LoadAllAssets 分支，
+                // 但那会重复加载，因此这里用一个弱引用缓存实例。
+                return _bundleCache.TryGetValue(path, out var b) ? b : null;
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        /// <summary>已加载的 bundle 实例缓存，避免二次加载。</summary>
+        private static readonly Dictionary<string, UnityEngine.AssetBundle> _bundleCache
+            = new Dictionary<string, UnityEngine.AssetBundle>(StringComparer.OrdinalIgnoreCase);
+
+        /// <summary>
         /// 官方音乐文件所在目录，相对 StreamingAssets。
         /// 7 个无扩展名的文件即 AssetBundle，每个里含多首曲子。
         /// </summary>
@@ -296,6 +335,16 @@ namespace SeaPowerDynamicMusic
         {
             "0_mainmenu", "nato", "wp", "night", "strategicmap", "victory", "defeat"
         };
+
+        /// <summary>
+        /// 已加载过的 bundle 路径。
+        ///
+        /// Unity 的 AssetBundle 全局唯一，同一个 bundle 只能 LoadFromFile 一次，
+        /// 重复调用会弹「another AssetBundle with the same files is already loaded」
+        /// 错误框挡住游戏菜单。重新扫描时靠这个集合跳过已加载的。
+        /// </summary>
+        private static readonly HashSet<string> _loadedBundles
+            = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         /// <summary>
         /// 官方音乐文件所在目录，相对 StreamingAssets。
@@ -327,74 +376,81 @@ namespace SeaPowerDynamicMusic
                 string path = Path.Combine(root, bundleName);
                 if (!File.Exists(path)) continue;
 
-                UnityEngine.AssetBundle bundle = null;
-                UnityEngine.AssetBundleRequest req = null;
-                bool failed = false;
+                // 已经加载过就直接复用，绝不再次 LoadFromFile，
+                // 否则 Unity 会弹「已被加载」错误框挡住游戏菜单。
+                UnityEngine.AssetBundle bundle = GetExistingBundle(path);
+                bool fresh = false;
 
-                try
+                if (bundle == null)
                 {
-                    bundle = UnityEngine.AssetBundle.LoadFromFile(path);
+                    try
+                    {
+                        bundle = UnityEngine.AssetBundle.LoadFromFile(path);
+                        fresh = bundle != null;
+                    }
+                    catch (Exception e)
+                    {
+                        Plugin.LogWarn(string.Format("读取 {0} 失败: {1}",
+                            bundleName, e.Message));
+                    }
+
                     if (bundle == null)
                     {
                         Plugin.LogWarn("无法打开官方音乐包: " + bundleName);
-                        failed = true;
+                        continue;
                     }
-                    else
+
+                    _loadedBundles.Add(path);
+                    _bundleCache[path] = bundle;
+                }
+
+                // 首次加载需要等异步完成；复用的实例资源已在内存里，直接取
+                UnityEngine.AssetBundleRequest req = null;
+                if (fresh)
+                {
+                    try { req = bundle.LoadAllAssetsAsync<AudioClip>(); }
+                    catch { }
+
+                    // 关键：让出一帧，等资源加载推进。
+                    // 在主线程空转会死锁，游戏会卡死在加载界面。
+                    while (req != null && !req.isDone)
                     {
-                        req = bundle.LoadAllAssetsAsync<AudioClip>();
+                        yield return null;
+                    }
+                }
+
+                int added = 0;
+                try
+                {
+                    AudioClip[] clips = fresh
+                        ? (req != null ? req.allAssets as AudioClip[] : null)
+                        : bundle.LoadAllAssets<AudioClip>();
+
+                    if (clips != null)
+                    {
+                        foreach (AudioClip clip in clips)
+                        {
+                            if (clip == null) continue;
+                            if (library.FindByClip(clip) != null) continue;
+
+                            var track = new MusicTrack(clip.name, clip, true);
+                            foreach (MusicScene scene in ScenesForClip(clip.name, bundleName))
+                            {
+                                track.Scenes.Add(scene);
+                            }
+                            library.AddOfficial(track);
+                            added++;
+                        }
                     }
                 }
                 catch (Exception e)
                 {
-                    Plugin.LogWarn(string.Format("读取 {0} 失败: {1}",
+                    Plugin.LogWarn(string.Format("解析 {0} 失败: {1}",
                         bundleName, e.Message));
-                    failed = true;
                 }
 
-                // 关键：让出一帧，等 Input System 与资源加载推进
-                while (req != null && !req.isDone)
-                {
-                    yield return null;
-                }
-
-                if (!failed && req != null)
-                {
-                    int added = 0;
-                    try
-                    {
-                        AudioClip[] clips = req.allAssets as AudioClip[];
-                        if (clips != null)
-                        {
-                            foreach (AudioClip clip in clips)
-                            {
-                                if (clip == null) continue;
-                                if (library.FindByClip(clip) != null) continue;
-
-                                var track = new MusicTrack(clip.name, clip, true);
-                                foreach (MusicScene scene in ScenesForClip(clip.name, bundleName))
-                                {
-                                    track.Scenes.Add(scene);
-                                }
-                                library.AddOfficial(track);
-                                added++;
-                            }
-                        }
-                    }
-                    catch (Exception e)
-                    {
-                        Plugin.LogWarn(string.Format("解析 {0} 失败: {1}",
-                            bundleName, e.Message));
-                    }
-
-                    total += added;
-                    Plugin.Verbose(string.Format("  {0}: {1} 首", bundleName, added));
-                }
-
-                if (bundle != null)
-                {
-                    try { bundle.Unload(false); }
-                    catch { }
-                }
+                total += added;
+                Plugin.Verbose(string.Format("  {0}: {1} 首", bundleName, added));
             }
 
             if (total > 0)
@@ -609,7 +665,7 @@ namespace SeaPowerDynamicMusic
     /// <summary>全局运行期设置。由配置文件和游戏内界面共同维护。</summary>
     public class MusicSettings
     {
-        public float Volume = 0.5f;
+        public float Volume = 0.2f;
         public float FadeSeconds = 2.0f;
         public bool Shuffle = true;
         public bool ReplaceVanilla = true;

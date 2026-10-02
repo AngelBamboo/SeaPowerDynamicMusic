@@ -454,6 +454,37 @@ namespace SeaPowerDynamicMusic
             }
         }
 
+        /// <summary>保存并返回是否成功，供面板提示。</summary>
+        public static bool TrySaveTrackSettings()
+        {
+            var host = Plugin.Instance;
+            if (host == null || host.Library == null)
+            {
+                Plugin.LogWarn("保存失败：模组尚未初始化完成");
+                return false;
+            }
+            if (string.IsNullOrEmpty(ModConfig.UserConfigPath))
+            {
+                Plugin.LogWarn("保存失败：找不到配置文件路径");
+                return false;
+            }
+
+            try
+            {
+                IniFile ini = IniFile.Load(ModConfig.UserConfigPath);
+                WriteTrackSettings(ini, host.Library);
+                ini.Save(ModConfig.UserConfigPath);
+                Plugin.LogInfo(string.Format("已保存 {0} 首曲目的设置到 {1}",
+                    host.Library.UserTrackCount, ModConfig.UserConfigPath));
+                return true;
+            }
+            catch (Exception e)
+            {
+                Plugin.LogError("保存失败: " + e);
+                return false;
+            }
+        }
+
         /// <summary>
         /// 把曲目的多分类、权重、优先级等设置写入用户配置。
         /// 官方音乐不写进配置，它们默认参与播放。

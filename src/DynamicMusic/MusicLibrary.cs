@@ -339,8 +339,19 @@ namespace SeaPowerDynamicMusic
             {
                 foreach (MusicScene s in t.Scenes)
                 {
+                    // 未归类是占位分类，不参与播放
+                    if (s == MusicScene.Unassigned) continue;
                     _byScene[s].Add(t);
                 }
+
+                // 一个分类都没勾的曲子放进「未归类」，
+                // 这样它只是不播，玩家仍能在面板里看到并调整。
+                bool real = false;
+                foreach (MusicScene s in t.Scenes)
+                {
+                    if (s != MusicScene.Unassigned) { real = true; break; }
+                }
+                if (!real) _byScene[MusicScene.Unassigned].Add(t);
             }
             foreach (var kv in _byScene)
             {

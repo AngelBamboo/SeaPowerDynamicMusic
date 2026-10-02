@@ -55,7 +55,7 @@ namespace SeaPowerDynamicMusic
             }
 
             var s = new MusicSettings();
-            s.Volume = Mathf.Clamp01(userConfig.GetFloat("Audio", "Volume", 0.5f));
+            s.Volume = Mathf.Clamp01(userConfig.GetFloat("Audio", "Volume", 0.2f));
             s.FadeSeconds = Mathf.Max(0f, userConfig.GetFloat("Audio", "FadeSeconds", 2.0f));
             s.Shuffle = userConfig.GetBool("Audio", "Shuffle", true);
             s.ReplaceVanilla = userConfig.GetBool("Audio", "ReplaceVanillaMusic", true);
@@ -101,7 +101,7 @@ namespace SeaPowerDynamicMusic
             sb.AppendLine();
             sb.AppendLine("[Audio]");
             sb.AppendLine("# 总音量 0~1");
-            sb.AppendLine("Volume=0.5");
+            sb.AppendLine("Volume=0.2");
             sb.AppendLine("# 切歌淡入淡出时长，单位秒。设为 0 则直接切。");
             sb.AppendLine("FadeSeconds=2.0");
             sb.AppendLine("# 同一分类内是否随机播放。false 表示按文件名顺序。");
