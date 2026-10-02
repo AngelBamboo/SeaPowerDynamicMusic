@@ -50,8 +50,10 @@ namespace SeaPowerDynamicMusic
             MusicDirector.ReadTrackSettings(ini, Library);
             Library.RebuildIndex();
 
-            // 官方音乐从 AssetBundle 异步载入，Scan 里不做等待
-            yield return OfficialMusic.LoadFromBundlesRoutine(Library);
+            // 官方音乐：等游戏自己加载完再取。
+            // 游戏会陆续把 7 个 bundle 填进 Globals._assetBundleDictionary，
+            // 这里轮询等待，取到多少算多少，之后仍缺就由 RetryOfficial 补。
+            yield return WaitAndCollectOfficial();
             Library.RebuildIndex();
 
             if (Library.AllTracks.Count == 0)
@@ -130,6 +132,64 @@ namespace SeaPowerDynamicMusic
                 "之后在面板点一次“重新扫描”通常就能补上。", maxWait));
         }
 
+        /// <summary>
+        /// 等游戏把官方音乐装进 bundle 缓存，再全部取过来。
+        ///
+        /// 绝不自己 LoadFromFile：AssetBundle 全局唯一，那样做会触发
+        /// 「already loaded」错误弹窗，而且会顶掉游戏已加载的资源。
+        /// 只能等游戏自己加载完再复用。
+        ///
+        /// 最多等 40 秒，每秒查一次并增量收集，
+        /// 这样玩家不需要手动点「重新扫描」。
+        /// </summary>
+        private IEnumerator WaitAndCollectOfficial()
+        {
+            const float maxWait = 40f;
+            float start = Time.realtimeSinceStartup;
+            int before = 0;
+
+            while (true)
+            {
+                int got = OfficialMusic.CollectFromGameCache(Library);
+                if (got > 0)
+                {
+                    Library.RebuildIndex();
+                    Plugin.LogInfo(string.Format("已载入 {0} 首官方音乐", got));
+                }
+
+                int total = 0;
+                foreach (MusicScene s in Enum.GetValues(typeof(MusicScene)))
+                {
+                    foreach (var t in Library.GetTracks(s))
+                    {
+                        if (t.Official) total++;
+                    }
+                }
+                total = Library.OfficialCount;
+
+                if (total > before) before = total;
+
+                // 7 个官方 bundle 全部到位就收工
+                if (before >= 7) break;
+
+                if (Time.realtimeSinceStartup - start > maxWait)
+                {
+                    if (before > 0)
+                    {
+                        Plugin.LogWarn(string.Format(
+                            "只等到 {0} 首官方音乐，其余的可在面板点“重新扫描”补齐。", before));
+                    }
+                    else
+                    {
+                        Plugin.LogWarn("未等到官方音乐，面板里将只有你自己的曲子。");
+                    }
+                    break;
+                }
+
+                yield return new WaitForSecondsRealtime(1f);
+            }
+        }
+
         private static void WarnEmptyLibrary()
         {
             string root = ModConfig.LibraryRoot;
@@ -178,7 +238,7 @@ namespace SeaPowerDynamicMusic
                 Library.Scan(Plugin.LibraryRoots, ini, ModConfig.LibraryRoot);
                 MusicDirector.ReadTrackSettings(ini, Library);
                 Library.RebuildIndex();
-                yield return OfficialMusic.LoadFromBundlesRoutine(Library);
+                yield return WaitAndCollectOfficial();
                 Library.RebuildIndex();
                 yield return Library.LoadAllCoroutine();
 

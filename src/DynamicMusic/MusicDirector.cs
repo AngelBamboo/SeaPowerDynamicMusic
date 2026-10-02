@@ -152,8 +152,10 @@ namespace SeaPowerDynamicMusic
             // 界面切换后立即重新检测并起播，不等冷却。
             // 玩家从战役回到主菜单时应当立刻听到主菜单音乐，
             // 而不是继续放着战斗曲等冷却过去。
+            // 先把自定义播放彻底停掉。战略地图与主菜单共用官方音乐，
+            // 若只是淡出 0.3 秒，上一首的尾巴会与新曲子叠在一起。
             _lastSwitchTime = -999f;
-            if (_player != null && _player.IsPlaying) _player.Stop(0.3f);
+            if (_player != null) _player.Stop(0f);
 
             // 置成一个不可能的当前场景，逼 Update 判定为「需要切换」
             _currentScene = MusicScene.Unassigned;

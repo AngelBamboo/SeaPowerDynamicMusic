@@ -31,6 +31,24 @@ namespace SeaPowerDynamicMusic
             get { return _active != null && _active.isPlaying; }
         }
 
+        /// <summary>当前曲目的播放进度，0~1。未播放时为 0。</summary>
+        public float Progress
+        {
+            get
+            {
+                if (_active == null || _currentTrack == null) return 0f;
+                float len = _currentTrack.Duration;
+                if (len <= 0f) return 0f;
+                return Mathf.Clamp01(_active.time / len);
+            }
+        }
+
+        /// <summary>当前曲目的播放位置，单位秒。</summary>
+        public float PositionSeconds
+        {
+            get { return _active != null ? _active.time : 0f; }
+        }
+
         /// <summary>当前曲目是否已播放结束（用于自动接下一首）。</summary>
         public bool CurrentFinished
         {

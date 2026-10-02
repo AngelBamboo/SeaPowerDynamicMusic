@@ -125,8 +125,8 @@ namespace SeaPowerDynamicMusic
             sb.AppendLine("[Panel]");
             sb.AppendLine("# 是否启用游戏内管理面板");
             sb.AppendLine("Enabled=true");
-            sb.AppendLine("# 呼出面板的快捷键，可选 F8 / F9 / F10 / Insert / Home");
-            sb.AppendLine("Hotkey=F8");
+            sb.AppendLine("# 呼出面板的快捷键，可选 F7 / F8 / F9 / Insert / Home");
+            sb.AppendLine("Hotkey=F7");
             sb.AppendLine();
             sb.AppendLine("# 下面按场景归类。某个分类没有曲目时会自动退让到 Cruise。");
             sb.AppendLine();

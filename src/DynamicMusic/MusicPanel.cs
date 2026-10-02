@@ -110,9 +110,9 @@ namespace SeaPowerDynamicMusic
                 var kb = UnityEngine.InputSystem.Keyboard.current;
                 if (kb != null)
                 {
+                    if (keyName == "F7" && kb.f7Key.wasPressedThisFrame) return true;
                     if (keyName == "F8" && kb.f8Key.wasPressedThisFrame) return true;
                     if (keyName == "F9" && kb.f9Key.wasPressedThisFrame) return true;
-                    if (keyName == "F10" && kb.f10Key.wasPressedThisFrame) return true;
                     if (keyName == "Insert" && kb.insertKey.wasPressedThisFrame) return true;
                     if (keyName == "Home" && kb.homeKey.wasPressedThisFrame) return true;
                 }
@@ -156,6 +156,7 @@ namespace SeaPowerDynamicMusic
             _windowBounds = _window;
             UI.Fill(_window, UI.Panel);
             DrawTitleBar();
+            DrawStatusBar(player, director, lib);
 
             // 边沿到达计数：任何位置检测到松开都算，用来确认输入有没有进来
             if (MouseInput.Released)
@@ -224,6 +225,61 @@ namespace SeaPowerDynamicMusic
 
         /// <summary>供十字标记使用的窗口矩形。</summary>
         private static Rect _windowBounds;
+
+        /// <summary>
+        /// 标题栏下方的状态条：当前曲目、场景、播放进度、曲目数量。
+        /// </summary>
+        private void DrawStatusBar(MusicPlayer player, MusicDirector director, MusicLibrary lib)
+        {
+            float y = _window.y + 30f;
+            var r = new Rect(_window.x + 8f, y, _window.width - 16f, 22f);
+            UI.Fill(r, new Color(1f, 1f, 1f, 0.04f));
+
+            float x = r.x + 4f;
+
+            UI.Label(new Rect(x, y, 46f, 22f), "正在播放", false, true);
+            x += 48f;
+
+            var cur = player.CurrentTrack;
+            string name = cur != null ? cur.DisplayName : "（无）";
+            if (cur != null && cur.Official) name = "[官方] " + name;
+            UI.Label(new Rect(x, y, 230f, 22f), UI.Ellipsis(name, 226f), true);
+            x += 234f;
+
+            UI.Label(new Rect(x, y, 30f, 22f), "场景", false, true);
+            x += 32f;
+            UI.Label(new Rect(x, y, 74f, 22f),
+                SceneInfo.SceneName(director.CurrentScene));
+            x += 78f;
+
+            // 进度条：当前时间 / 总时长
+            if (cur != null && cur.Duration > 0f)
+            {
+                UI.Label(new Rect(x, y, 38f, 22f),
+                    FormatDuration(player.PositionSeconds), false, true);
+                x += 40f;
+
+                float p = player.Progress;
+                var track = new Rect(x, y + 8f, 150f, 6f);
+                UI.Fill(track, new Color(1f, 1f, 1f, 0.15f));
+                UI.Fill(new Rect(track.x, track.y, track.width * p, track.height), UI.Accent);
+                x += 156f;
+
+                UI.Label(new Rect(x, y, 38f, 22f),
+                    FormatDuration(cur.Duration), false, true);
+                x += 42f;
+
+                if (!player.IsPlaying)
+                {
+                    UI.Label(new Rect(x, y, 44f, 22f), "已暂停", false, false, true);
+                }
+            }
+
+            // 数量统计靠右
+            UI.Label(new Rect(r.xMax - 170f, y, 166f, 22f),
+                string.Format("用户 {0} 首 / 官方 {1} 首", lib.UserTrackCount, lib.OfficialCount),
+                false, true, false, TextAnchor.MiddleRight);
+        }
 
         private void DrawTitleBar()
         {
@@ -445,15 +501,21 @@ namespace SeaPowerDynamicMusic
             label = UI.Ellipsis(label, 322f);
             if (UI.Click(playBtn, label, t.IsLoaded))
             {
-                if (t.IsLoaded)
-                {
-                    director.PlayTrack(t);
-                    SetStatus("试听: " + t.DisplayName);
-                }
-                else
+                if (!t.IsLoaded)
                 {
                     SetStatus(t.LoadFailed ? "该文件加载失败: " + t.DisplayName
                                            : "尚未加载完成: " + t.DisplayName);
+                }
+                else if (isCurrent)
+                {
+                    // 再点当前这首：暂停 / 继续
+                    if (player.IsPlaying) { player.Pause(); SetStatus("已暂停: " + t.DisplayName); }
+                    else { player.UnPause(); SetStatus("继续播放: " + t.DisplayName); }
+                }
+                else
+                {
+                    director.PlayTrack(t);
+                    SetStatus("试听: " + t.DisplayName);
                 }
             }
 

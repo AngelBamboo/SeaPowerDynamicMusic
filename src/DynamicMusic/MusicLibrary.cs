@@ -319,6 +319,21 @@ namespace SeaPowerDynamicMusic
             return null;
         }
 
+        /// <summary>统计官方音乐数量（去重，按 AudioClip 判断）。</summary>
+        public int OfficialCount
+        {
+            get
+            {
+                int n = 0;
+                var seen = new HashSet<AudioClip>();
+                for (int i = 0; i < _all.Count; i++)
+                {
+                    if (_all[i].Official && _all[i].Clip != null && seen.Add(_all[i].Clip)) n++;
+                }
+                return n;
+            }
+        }
+
         /// <summary>只统计用户自己的音乐。</summary>
         public int UserTrackCount
         {

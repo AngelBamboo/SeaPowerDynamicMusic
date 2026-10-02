@@ -378,115 +378,88 @@ namespace SeaPowerDynamicMusic
         /// </summary>
 
         /// <summary>
-        /// 从 AssetBundle 读取官方曲目（协程版）。
+        /// 从游戏已加载的 bundle 缓存里收集官方曲目，返回新增数量。
         ///
-        /// 必须做成协程：LoadAllAssetsAsync 的内部加载要靠主线程推进，
-        /// 在主线程原地 while(!isDone) 空转会死锁，游戏会卡死在加载界面。
-        /// 之前就是这么写的，直接导致游戏打不开。
+        /// 只读不加载：游戏加载完一个 bundle 就能取一个，
+        /// 因此可以反复调用做增量收集，天然适配游戏的异步加载。
         /// </summary>
-        internal static IEnumerator LoadFromBundlesRoutine(MusicLibrary library)
+        internal static int CollectFromGameCache(MusicLibrary library)
         {
-            string root = Path.Combine(UnityEngine.Application.dataPath,
-                "StreamingAssets", "original", "audio", "music", "original");
-
-            if (!Directory.Exists(root))
+            int added = 0;
+            try
             {
-                Plugin.Verbose("未找到官方音乐目录: " + root);
-                yield break;
-            }
+                var globals = AccessTools.TypeByName("SeaPower.Globals");
+                if (globals == null) return 0;
 
-            int total = 0;
+                var field = AccessTools.Field(globals, "_assetBundleDictionary");
+                if (field == null) return 0;
 
-            foreach (string bundleName in BundleNames)
-            {
-                string path = Path.Combine(root, bundleName);
-                if (!File.Exists(path)) continue;
+                var dict = field.GetValue(null) as System.Collections.IDictionary;
+                if (dict == null) return 0;
 
-                // 已经加载过就直接复用，绝不再次 LoadFromFile，
-                // 否则 Unity 会弹「已被加载」错误框挡住游戏菜单。
-                UnityEngine.AssetBundle bundle = GetExistingBundle(path, bundleName);
-                bool fresh = false;
-
-                if (bundle == null)
+                foreach (System.Collections.DictionaryEntry entry in dict)
                 {
-                    try
+                    if (entry.Value is not UnityEngine.AssetBundle bundle) continue;
+
+                    string key = entry.Key as string ?? "";
+
+                    // 键可能是完整路径或纯文件名，官方音乐包都是无扩展名的
+                    if (!IsOfficialBundleKey(key)) continue;
+                    if (_bundleCache.ContainsKey(key)) continue;
+
+                    AudioClip[] clips;
+                    try { clips = bundle.LoadAllAssets<AudioClip>(); }
+                    catch { continue; }
+                    if (clips == null || clips.Length == 0) continue;
+
+                    string bundleName = OfficialNameOf(key);
+                    _bundleCache[key] = bundle;
+
+                    foreach (AudioClip clip in clips)
                     {
-                        bundle = UnityEngine.AssetBundle.LoadFromFile(path);
-                        fresh = bundle != null;
-                    }
-                    catch (Exception e)
-                    {
-                        Plugin.LogWarn(string.Format("读取 {0} 失败: {1}",
-                            bundleName, e.Message));
-                    }
+                        if (clip == null) continue;
+                        if (library.FindByClip(clip) != null) continue;
 
-                    if (bundle == null)
-                    {
-                        Plugin.LogWarn("无法打开官方音乐包: " + bundleName);
-                        continue;
-                    }
-
-                    _loadedBundles.Add(path);
-                    _bundleCache[path] = bundle;
-                }
-
-                // 首次加载需要等异步完成；复用的实例资源已在内存里，直接取
-                UnityEngine.AssetBundleRequest req = null;
-                if (fresh)
-                {
-                    try { req = bundle.LoadAllAssetsAsync<AudioClip>(); }
-                    catch { }
-
-                    // 关键：让出一帧，等资源加载推进。
-                    // 在主线程空转会死锁，游戏会卡死在加载界面。
-                    while (req != null && !req.isDone)
-                    {
-                        yield return null;
-                    }
-                }
-
-                int added = 0;
-                try
-                {
-                    AudioClip[] clips = fresh
-                        ? (req != null ? req.allAssets as AudioClip[] : null)
-                        : bundle.LoadAllAssets<AudioClip>();
-
-                    if (clips != null)
-                    {
-                        foreach (AudioClip clip in clips)
+                        var track = new MusicTrack(clip.name, clip, true);
+                        foreach (MusicScene scene in ScenesForClip(clip.name, bundleName))
                         {
-                            if (clip == null) continue;
-                            if (library.FindByClip(clip) != null) continue;
-
-                            var track = new MusicTrack(clip.name, clip, true);
-                            foreach (MusicScene scene in ScenesForClip(clip.name, bundleName))
-                            {
-                                track.Scenes.Add(scene);
-                            }
-                            library.AddOfficial(track);
-                            added++;
+                            track.Scenes.Add(scene);
                         }
+                        library.AddOfficial(track);
+                        added++;
                     }
-                }
-                catch (Exception e)
-                {
-                    Plugin.LogWarn(string.Format("解析 {0} 失败: {1}",
-                        bundleName, e.Message));
-                }
 
-                total += added;
-                Plugin.Verbose(string.Format("  {0}: {1} 首", bundleName, added));
+                    Plugin.Verbose(string.Format("  {0}: {1} 首", bundleName, added));
+                }
             }
+            catch (Exception e)
+            {
+                Plugin.Verbose("收集官方音乐失败: " + e.Message);
+            }
+            return added;
+        }
 
-            if (total > 0)
+        /// <summary>判断字典键是不是官方音乐包。</summary>
+        private static bool IsOfficialBundleKey(string key)
+        {
+            if (string.IsNullOrEmpty(key)) return false;
+            for (int i = 0; i < BundleNames.Length; i++)
             {
-                Plugin.LogInfo(string.Format("已从 AssetBundle 载入 {0} 首官方音乐", total));
+                if (key.IndexOf(BundleNames[i], StringComparison.OrdinalIgnoreCase) >= 0)
+                    return true;
             }
-            else
+            return false;
+        }
+
+        /// <summary>从键里取出包名，用于判断曲目归属哪个场景。</summary>
+        private static string OfficialNameOf(string key)
+        {
+            for (int i = 0; i < BundleNames.Length; i++)
             {
-                Plugin.LogWarn("未能从 AssetBundle 载入官方音乐，面板里将看不到官方曲目。");
+                if (key.IndexOf(BundleNames[i], StringComparison.OrdinalIgnoreCase) >= 0)
+                    return BundleNames[i];
             }
+            return key;
         }
 
         /// <summary>把游戏自带音乐导入音乐库。游戏尚未加载完时返回 0。</summary>
