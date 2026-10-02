@@ -90,11 +90,16 @@ namespace SeaPowerDynamicMusic
         internal static bool Click(Rect r, string text, bool enabled = true)
         {
             bool hover = enabled && MouseInput.Contains(r);
+
+            // 悬停时画一圈亮边，鼠标是否被跟踪到一眼就能看出来
             Fill(r, !enabled ? Disabled : (hover ? ButtonHover : Button));
+            if (hover)
+            {
+                Fill(new Rect(r.x, r.yMax - 2f, r.width, 2f), Accent);
+            }
 
             Label(r, text, false, !enabled, false, TextAnchor.MiddleCenter);
 
-            // 松手瞬间才算点击，避免按住时反复触发
             return enabled && MouseInput.Contains(r) && MouseInput.Released;
         }
 
@@ -139,18 +144,38 @@ namespace SeaPowerDynamicMusic
             return min + (max - min) * local;
         }
 
-        /// <summary>自绘勾选框，返回 true 表示状态被翻转。</summary>
+        /// <summary>
+        /// 自绘勾选框，返回 true 表示被点击（由调用方翻转状态）。
+        /// 方框与文字分开画，文字区也能点，按钮区更宽更好点。
+        /// </summary>
         internal static bool Checkbox(Rect r, bool value, string text)
         {
-            var box = new Rect(r.x, r.y + (r.height - 13f) * 0.5f, 13f, 13f);
+            float boxSize = Mathf.Min(14f, r.height - 4f);
+            var box = new Rect(r.x, r.y + (r.height - boxSize) * 0.5f, boxSize, boxSize);
 
-            Fill(box, value ? Accent : new Color(0f, 0f, 0f, 0.5f));
-            if (!value)
+            Fill(box, value ? Accent : new Color(0f, 0f, 0f, 0.55f));
+            if (value)
             {
-                Fill(new Rect(box.xMax - 1f, box.y, 1f, box.height), new Color(1f, 1f, 1f, 0.25f));
+                // 勾：两条短线
+                Color old = GUI.color;
+                GUI.color = new Color(0.05f, 0.10f, 0.14f, 1f);
+                Fill(new Rect(box.x + boxSize * 0.22f, box.center.y - 1f,
+                    boxSize * 0.28f, 2f), GUI.color);
+                Fill(new Rect(box.x + boxSize * 0.42f, box.y + boxSize * 0.30f,
+                    2f, boxSize * 0.42f), GUI.color);
+                GUI.color = old;
+            }
+            else
+            {
+                Fill(new Rect(box.x, box.y, boxSize, 1f), new Color(1f, 1f, 1f, 0.30f));
+                Fill(new Rect(box.x, box.yMax - 1f, boxSize, 1f), new Color(1f, 1f, 1f, 0.30f));
+                Fill(new Rect(box.x, box.y, 1f, boxSize), new Color(1f, 1f, 1f, 0.30f));
+                Fill(new Rect(box.xMax - 1f, box.y, 1f, boxSize), new Color(1f, 1f, 1f, 0.30f));
             }
 
-            Label(new Rect(r.x + 18f, r.y, r.width - 18f, r.height), text, false, !value);
+            var textRect = new Rect(r.x + boxSize + 5f, r.y,
+                r.width - boxSize - 5f, r.height);
+            Label(textRect, text, false, !value);
 
             return MouseInput.Contains(r) && MouseInput.Released;
         }

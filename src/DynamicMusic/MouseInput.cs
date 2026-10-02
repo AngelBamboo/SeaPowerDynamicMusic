@@ -21,29 +21,98 @@ namespace SeaPowerDynamicMusic
         private static int _lastClickFrame = -1;
         private static bool _pressedLastFrame;
 
-        /// <summary>当前鼠标位置（屏幕坐标，左下原点）。</summary>
+        // ---- 诊断信息，面板底部会显示 ----
+
+        /// <summary>数据来源：new / legacy / none。</summary>
+        internal static string Source = "未初始化";
+
+        /// <summary>是否读到了鼠标设备。</summary>
+        internal static bool DeviceFound;
+
+        /// <summary>最近一次读到的原始坐标。</summary>
+        internal static Vector2 RawPosition;
+
+        /// <summary>换算到 GUI 坐标后的值。</summary>
+        internal static Vector2 GuiPosition;
+
+        /// <summary>左键当前是否按下。</summary>
+        internal static bool RawHeld;
+
+        /// <summary>本帧是否检测到按下。</summary>
+        internal static bool RawPressed;
+
+        /// <summary>本帧是否检测到松开。</summary>
+        internal static bool RawReleased;
+
+        /// <summary>当前鼠标位置，已换算到 IMGUI 坐标系（左下原点）。</summary>
         internal static Vector2 Position
         {
             get
             {
-                try
+                Vector2 p = ReadRaw();
+                RawPosition = p;
+                GuiPosition = ToGui(p);
+                return GuiPosition;
+            }
+        }
+
+        /// <summary>
+        /// 读 Input System 的原始屏幕坐标。
+        /// Input System 的 y 轴原点在左下，与 IMGUI 一致；
+        /// 但旧 Input 的 y 轴原点在左上，需要翻转。
+        /// </summary>
+        private static Vector2 ReadRaw()
+        {
+            try
+            {
+                var p = Pointer.current;
+                if (p != null)
                 {
-                    var p = Pointer.current;
-                    if (p != null) return p.position.ReadValue();
-                }
-                catch
-                {
-                    // 读不到就退回旧输入
-                }
-                try
-                {
-                    return UnityEngine.Input.mousePosition;
-                }
-                catch
-                {
-                    return Vector2.zero;
+                    DeviceFound = true;
+                    Source = "Input System";
+                    return p.position.ReadValue();
                 }
             }
+            catch { }
+
+            try
+            {
+                var m = Mouse.current;
+                if (m != null)
+                {
+                    DeviceFound = true;
+                    Source = "Input System (Mouse)";
+                    return m.position.ReadValue();
+                }
+            }
+            catch { }
+
+            try
+            {
+                DeviceFound = true;
+                Source = "旧 Input";
+                return UnityEngine.Input.mousePosition;
+            }
+            catch
+            {
+                DeviceFound = false;
+                Source = "无（读不到鼠标）";
+                return Vector2.zero;
+            }
+        }
+
+        /// <summary>
+        /// 换算到 IMGUI 坐标系。
+        /// 旧 Input 的 y 原点在左上（向下为正），需要用屏幕高度翻转；
+        /// Input System 本身就是左下原点，不要动，否则会上下颠倒。
+        /// </summary>
+        private static Vector2 ToGui(Vector2 raw)
+        {
+            if (Source == "旧 Input")
+            {
+                return new Vector2(raw.x, Screen.height - raw.y);
+            }
+            return raw;
         }
 
         /// <summary>左键是否按住。</summary>
@@ -51,20 +120,33 @@ namespace SeaPowerDynamicMusic
         {
             get
             {
-                try
-                {
-                    var p = Pointer.current;
-                    if (p != null) return p.press.isPressed;
-                }
-                catch { }
-                try
-                {
-                    return UnityEngine.Input.GetMouseButton(0);
-                }
-                catch
-                {
-                    return false;
-                }
+                bool v = ReadHeld();
+                RawHeld = v;
+                return v;
+            }
+        }
+
+        private static bool ReadHeld()
+        {
+            try
+            {
+                var p = Pointer.current;
+                if (p != null) return p.press.isPressed;
+            }
+            catch { }
+            try
+            {
+                var m = Mouse.current;
+                if (m != null) return m.leftButton.isPressed;
+            }
+            catch { }
+            try
+            {
+                return UnityEngine.Input.GetMouseButton(0);
+            }
+            catch
+            {
+                return false;
             }
         }
 
@@ -73,8 +155,10 @@ namespace SeaPowerDynamicMusic
         {
             get
             {
-                bool now = Held;
+                bool now = ReadHeld();
+                RawHeld = now;
                 bool pressed = now && !_pressedLastFrame;
+                RawPressed = pressed;
                 _pressedLastFrame = now;
                 return pressed;
             }
@@ -85,8 +169,10 @@ namespace SeaPowerDynamicMusic
         {
             get
             {
-                bool now = Held;
+                bool now = ReadHeld();
+                RawHeld = now;
                 bool released = !now && _pressedLastFrame;
+                RawReleased = released;
                 return released;
             }
         }

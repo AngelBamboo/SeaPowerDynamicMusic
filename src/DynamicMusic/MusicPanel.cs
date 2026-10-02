@@ -28,7 +28,7 @@ namespace SeaPowerDynamicMusic
         private string _filter = "";
 
         /// <summary>窗口矩形，拖动时改动。</summary>
-        private Rect _window = new Rect(110f, 90f, 940f, 520f);
+        private Rect _window = new Rect(60f, 70f, 1180f, 560f);
 
         /// <summary>拖动窗口用的状态。</summary>
         private bool _draggingWindow;
@@ -116,8 +116,8 @@ namespace SeaPowerDynamicMusic
             float bottom = _window.yMax - 52f;
             float height = bottom - top;
 
-            float colGroup = 92f;
-            float colScene = 118f;
+            float colGroup = 104f;
+            float colScene = 132f;
             float gap = 8f;
 
             float x = _window.x + 12f;
@@ -252,7 +252,7 @@ namespace SeaPowerDynamicMusic
             UI.Fill(listRect, new Color(0f, 0f, 0f, 0.15f));
 
             // 滚动
-            float rowH = 54f;
+            float rowH = 58f;
             float contentH = tracks.Count * rowH;
             if (contentH > listH)
             {
@@ -372,21 +372,22 @@ namespace SeaPowerDynamicMusic
             else
                 UI.Label(new Rect(x + 528f, y, 44f, 22f), "待载", false, true);
 
-            DrawSceneToggles(t, new Rect(r.x + 4f, r.y + 26f, r.width - 8f, 20f));
+            DrawSceneToggles(t, new Rect(r.x + 4f, r.y + 30f, r.width - 8f, 22f));
         }
 
         /// <summary>归属分类勾选行。一首曲子可同时属于多个场景。</summary>
         private void DrawSceneToggles(MusicTrack t, Rect r)
         {
-            UI.Label(new Rect(r.x, r.y, 28f, r.height), "归属", false, true);
+            UI.Label(new Rect(r.x, r.y, 30f, r.height), "归属", false, true);
 
-            float x = r.x + 30f;
-            const float w = 56f;
-            const float gap = 2f;
+            float x = r.x + 32f;
+            const float gap = 4f;
 
             bool changed = false;
             foreach (MusicScene s in Enum.GetValues(typeof(MusicScene)))
             {
+                // 按文字实际长度算宽度，避免中文被截断
+                float w = SceneInfo.SceneName(s).Length * 12f + 22f;
                 var box = new Rect(x, r.y, w, r.height);
                 if (UI.Checkbox(box, t.Scenes.Contains(s), SceneInfo.SceneName(s)))
                 {
@@ -472,14 +473,23 @@ namespace SeaPowerDynamicMusic
 
             if (!string.IsNullOrEmpty(_status) && Time.realtimeSinceStartup < _statusUntil)
             {
-                UI.Label(new Rect(_window.x + 12f, y + 22f, _window.width - 24f, 18f),
+                UI.Label(new Rect(_window.x + 12f, y + 20f, _window.width - 24f, 18f),
                     _status, false, false, true);
             }
             else
             {
-                UI.Label(new Rect(_window.x + 12f, y + 22f, _window.width - 24f, 18f),
-                    string.Format("快捷键 {0} 开关本面板；权重 0 表示不参与随机，优先级数字越大越优先。",
+                UI.Label(new Rect(_window.x + 12f, y + 20f, 470f, 18f),
+                    string.Format("快捷键 {0} 开关面板；权重 0 不参与随机，优先级越大越优先",
                         ModConfig.PanelKey), false, true);
+
+                // 诊断信息：点击一直不生效时，用它确认鼠标到底读没读到
+                UI.Label(new Rect(_window.x + 490f, y + 20f, _window.width - 502f, 18f),
+                    string.Format("输入 {0} | 屏幕 {1}x{2} | 鼠标 {3:F0},{4:F0} | 按下 {5}",
+                        MouseInput.DeviceFound ? MouseInput.Source : "无设备",
+                        Screen.width, Screen.height,
+                        MouseInput.GuiPosition.x, MouseInput.GuiPosition.y,
+                        MouseInput.RawHeld ? "是" : "否"),
+                    false, true, !MouseInput.DeviceFound);
             }
         }
 
