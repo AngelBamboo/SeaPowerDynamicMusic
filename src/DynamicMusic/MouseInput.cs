@@ -55,8 +55,11 @@ namespace SeaPowerDynamicMusic
             {
                 Vector2 p = ReadRaw();
                 RawPosition = p;
-                GuiPosition = ToGui(p);
-                return GuiPosition;
+                Vector2 g = ToGui(p);
+                // 校准后叠加 Y 偏移，命中判定才与真实光标一致
+                if (YCalibrated) g.y += YOffset;
+                GuiPosition = g;
+                return g;
             }
         }
 
@@ -107,8 +110,10 @@ namespace SeaPowerDynamicMusic
 
         /// <summary>
         /// 换算到 IMGUI 坐标系。
-        /// 旧 Input 的 y 原点在左上（向下为正），需要用屏幕高度翻转；
-        /// Input System 本身就是左下原点，不要动，否则会上下颠倒。
+        ///
+        /// Input System 的 y 原点已经在下方，与 IMGUI 一致，不该翻转。
+        /// 但实测它报的 y 与 IMGUI 坐标存在偏移（可能是渲染分辨率与
+        /// 输入分辨率不一致），因此这里不做任何假设，改为运行时校准。
         /// </summary>
         private static Vector2 ToGui(Vector2 raw)
         {
@@ -117,6 +122,31 @@ namespace SeaPowerDynamicMusic
                 return new Vector2(raw.x, Screen.height - raw.y);
             }
             return raw;
+        }
+
+        /// <summary>
+        /// 运行时校准 Y 轴偏移。
+        ///
+        /// 现象：游戏渲染分辨率与输入坐标不一致时，Input System 报的 y
+        /// 与 IMGUI 坐标存在固定偏移（实测 X 正常，Y 偏约 200 像素），
+        /// 按钮点不到。逐帧比例换算无法解决，只能记一个常量偏移。
+        ///
+        /// 校准方式：把光标放到窗口标题栏上按 F9，
+        /// 标题栏的 y 是我们自己定义的，与真实光标必然重合。
+        /// </summary>
+        internal static float YOffset;
+        internal static bool YCalibrated;
+
+        /// <summary>记录标题栏中心在 GUI 坐标里的 y，作为校准参考。</summary>
+        internal static float TitleBarGuiY;
+
+        /// <summary>用标题栏做参考，把当前 Y 偏移记下来。</summary>
+        internal static void CalibrateY()
+        {
+            Vector2 raw = ReadRaw();
+            float guiY = ToGui(raw).y;
+            YOffset = TitleBarGuiY - guiY;
+            YCalibrated = true;
         }
 
         /// <summary>左键是否按住。</summary>

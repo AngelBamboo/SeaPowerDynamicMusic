@@ -27,6 +27,9 @@ namespace SeaPowerDynamicMusic
         private float _statusUntil;
         private string _filter = "";
 
+        /// <summary>鼠标穿透：开启后点击同时作用于游戏界面。</summary>
+        private static bool _mousePassthrough;
+
         /// <summary>窗口矩形，拖动时改动。</summary>
         private Rect _window = new Rect(60f, 70f, 1180f, 560f);
 
@@ -48,16 +51,41 @@ namespace SeaPowerDynamicMusic
             // 放在 OnGUI 里会被多次调用消耗掉，导致点击永远不触发。
             MouseInput.BeginFrame();
 
-            // 记录 Update 是否真的在跑，以及最近一次检测到边沿的帧号。
-            // 如果 UpdateFrame 一直是 0，说明 Update 没被调用，
-            // 边沿也就永远不会刷新。
             if (Time.frameCount != _lastUpdateFrame)
             {
                 _lastUpdateFrame = Time.frameCount;
                 _updateCount++;
             }
 
+            if (CalibrateKeyPressed())
+            {
+                MouseInput.CalibrateY();
+                SetStatus(string.Format("Y 轴偏移已校准: {0:F0} 像素（十字已与光标对齐）",
+                    MouseInput.YOffset));
+                return;
+            }
+
             if (HotkeyPressed()) _visible = !_visible;
+        }
+
+        /// <summary>F9 用于校准 Y 轴偏移，不受面板快捷键配置影响。</summary>
+        private bool CalibrateKeyPressed()
+        {
+            if (!_visible) return false;
+            try
+            {
+                var kb = UnityEngine.InputSystem.Keyboard.current;
+                if (kb != null) return kb.f9Key.wasPressedThisFrame;
+            }
+            catch { }
+            try
+            {
+                return Input.GetKeyDown(KeyCode.F9);
+            }
+            catch
+            {
+                return false;
+            }
         }
 
         private int _lastUpdateFrame = -1;
@@ -114,7 +142,6 @@ namespace SeaPowerDynamicMusic
 
             // 拖动窗口：按住标题栏即可移动
             HandleWindowDrag();
-            if (_draggingWindow) return;
 
             var lib = Plugin.Instance != null ? Plugin.Instance.Library : null;
             var director = Plugin.Instance != null ? Plugin.Instance.Director : null;
@@ -197,6 +224,9 @@ namespace SeaPowerDynamicMusic
         {
             var r = new Rect(_window.x + 1f, _window.y + 1f, _window.width - 2f, 26f);
             UI.Label(r, "动态音乐  Dynamic Music", true, false, false, TextAnchor.MiddleCenter);
+
+            // 供 F9 校准用：标题栏中心就是校准参考点
+            MouseInput.TitleBarGuiY = r.center.y;
         }
 
         private void HandleWindowDrag()
@@ -507,6 +537,16 @@ namespace SeaPowerDynamicMusic
                 settings.IncludeOfficial = !settings.IncludeOfficial;
                 ModConfig.Settings = settings;
                 ModConfig.SaveUserConfig();
+            }
+            x += 100f;
+
+            // 鼠标穿透：开启后点击会同时作用于游戏界面，方便边看面板边操作
+            if (UI.Checkbox(new Rect(x, y, 92f, 20f), _mousePassthrough, "鼠标穿透"))
+            {
+                _mousePassthrough = !_mousePassthrough;
+                SetStatus(_mousePassthrough
+                    ? "已开启鼠标穿透，点击会同时作用于游戏"
+                    : "已关闭鼠标穿透，点击只作用于本面板");
             }
 
             float bw = 74f;
