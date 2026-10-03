@@ -174,3 +174,25 @@ Anchor Chain 是 Sea Power 模组社区的公共基础设施，采用 MIT 许可
 ## 许可
 
 代码采用 MIT 许可，见 [LICENSE](LICENSE)。
+
+## 💖 赞助
+
+**一曲谢君，山高水长。相见于江湖，感谢有您的支持!**
+
+本模组仍在持续维护中。若它省了你改配置的时间，欢迎请我喝杯咖啡。
+
+<table>
+<tr>
+<td align="center"><b>微信赞赏</b></td>
+<td align="center"><b>支付宝</b></td>
+</tr>
+<tr>
+<td align="center"><img src="docs/images/sponsor-wechat.png" width="230" alt="微信赞赏码"></td>
+<td align="center"><img src="docs/images/sponsor-alipay.png" width="230" alt="支付宝收款码"></td>
+</tr>
+</table>
+
+> 支付宝为普通收款码，扫码后按转账处理即可，不会显示在你的账单里。
+> 微信为赞赏码，付款界面会显示「赞赏」。
+
+感谢每一位支持者 ❤️
