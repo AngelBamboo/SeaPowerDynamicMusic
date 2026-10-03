@@ -732,24 +732,16 @@ namespace SeaPowerDynamicMusic
         /// <summary>
         /// 官方曲目的场景归属。
         ///
-        /// nato / wp / night 三组战役音乐同时归入「北约」与「华约」，
-        /// 这样无论玩家操控哪一方都能听到战役音乐，
-        /// 相当于「不受阵营限制」的效果。玩家在面板里可以自行增减归属。
+        /// 只归 _side 指定的那一个场景：nato 进「北约」，wp 进「华约」，
+        /// night 进「夜间」，互不交叉。这样面板里的官方曲目
+        /// 与游戏原本的分组一致，不会出现同一首在两边重复出现。
         ///
-        /// 其余（主菜单、战略地图、胜利、失败）只归各自对应的场景。
+        /// 想让某首曲子跨分类播放，在面板里自己勾选即可，
+        /// 面板支持多场景归属，勾几个就出现在几个分类下。
         /// </summary>
         private static void AddOfficialScenes(MusicTrack track, string side)
         {
-            MusicScene scene = SceneOfSide(side);
-            track.Scenes.Add(scene);
-
-            if (scene == MusicScene.Nato || scene == MusicScene.WP
-                || scene == MusicScene.Night)
-            {
-                // 战役音乐不限阵营，两边都能播
-                track.Scenes.Add(MusicScene.Nato);
-                track.Scenes.Add(MusicScene.WP);
-            }
+            track.Scenes.Add(SceneOfSide(side));
         }
 
         /// <summary>
