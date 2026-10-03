@@ -378,6 +378,11 @@ namespace SeaPowerDynamicMusic
 
         private MusicTrack PickTrack(MusicScene scene, List<MusicTrack> tracks)
         {
+            // 候选池已由 GetTracks 按场景过滤，优先级只在这一池内比较，
+            // 所以高优先级的战斗曲不会跑到主界面去播。
+            Plugin.Verbose(string.Format("{0} 候选 {1} 首",
+                SceneInfo.SceneName(scene), tracks.Count));
+
             // 先按优先级分层，只在最高档里挑。全部用完后才降到下一档，
             // 这样「优先播放某几首」这个需求可以直接用优先级表达。
             var ready = new List<MusicTrack>();

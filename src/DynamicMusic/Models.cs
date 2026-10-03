@@ -646,13 +646,17 @@ namespace SeaPowerDynamicMusic
             if (key.Contains("defeat")) { yield return MusicScene.Defeat; yield break; }
             if (key.Contains("credit")) { yield return MusicScene.Credits; yield break; }
 
-            // nato / wp / night 都属于战役内音乐，night 同时也算紧张
-            if (key.Contains("nato") || key.Contains("wp") || key.Contains("night")
-                || key.Contains("game"))
+            // 战役内的包：nato 巡航、wp 交战、night 紧张。
+            //
+            // 每首曲子只归一个场景。之前三个包都同时归入
+            // Cruise / Tension / Combat，导致一首战斗曲在主菜单
+            // 场景也进入候选池，优先级一高就在主界面响起来。
+            // 场景归属与优先级是两件事：优先级只在所属场景内比较。
+            if (key.Contains("wp")) { yield return MusicScene.Combat; yield break; }
+            if (key.Contains("night")) { yield return MusicScene.Tension; yield break; }
+            if (key.Contains("nato") || key.Contains("game"))
             {
                 yield return MusicScene.Cruise;
-                yield return MusicScene.Tension;
-                yield return MusicScene.Combat;
                 yield break;
             }
 
