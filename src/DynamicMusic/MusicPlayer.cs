@@ -43,6 +43,15 @@ namespace SeaPowerDynamicMusic
             }
         }
 
+        /// <summary>跳到指定进度（0~1）。用于拖动进度条。</summary>
+        public void Seek(float progress01)
+        {
+            if (_active == null || _currentTrack == null) return;
+            float len = _currentTrack.Duration;
+            if (len <= 0f) return;
+            _active.time = Mathf.Clamp01(progress01) * len;
+        }
+
         /// <summary>当前曲目的播放位置，单位秒。</summary>
         public float PositionSeconds
         {

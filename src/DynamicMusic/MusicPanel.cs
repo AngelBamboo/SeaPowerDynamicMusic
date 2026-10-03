@@ -22,6 +22,7 @@ namespace SeaPowerDynamicMusic
         private bool _visible;
         private float _trackScroll;
         private static bool _barDragging;
+        private static bool _seekDrag;
         private SceneGroup _group = SceneGroup.Mission;
         private MusicScene _scene = MusicScene.Cruise;
         private string _status = "";
@@ -32,7 +33,7 @@ namespace SeaPowerDynamicMusic
         private static bool _mousePassthrough;
 
         /// <summary>窗口矩形，拖动时改动。</summary>
-        private Rect _window = new Rect(60f, 70f, 1180f, 560f);
+        private Rect _window = new Rect(50f, 60f, 1340f, 620f);
 
         /// <summary>拖动窗口用的状态。</summary>
         private bool _draggingWindow;
@@ -177,12 +178,12 @@ namespace SeaPowerDynamicMusic
                 return;
             }
 
-            float top = _window.y + 42f;
+            float top = _window.y + 56f;
             float bottom = _window.yMax - 52f;
             float height = bottom - top;
 
-            float colGroup = 104f;
-            float colScene = 132f;
+            float colGroup = 112f;
+            float colScene = 146f;
             float gap = 8f;
 
             float x = _window.x + 12f;
@@ -231,8 +232,8 @@ namespace SeaPowerDynamicMusic
         /// </summary>
         private void DrawStatusBar(MusicPlayer player, MusicDirector director, MusicLibrary lib)
         {
-            float y = _window.y + 30f;
-            var r = new Rect(_window.x + 8f, y, _window.width - 16f, 22f);
+            float y = _window.y + 28f;
+            var r = new Rect(_window.x + 8f, y, _window.width - 16f, 24f);
             UI.Fill(r, new Color(1f, 1f, 1f, 0.04f));
 
             float x = r.x + 4f;
@@ -243,40 +244,56 @@ namespace SeaPowerDynamicMusic
             var cur = player.CurrentTrack;
             string name = cur != null ? cur.DisplayName : "（无）";
             if (cur != null && cur.Official) name = "[官方] " + name;
-            UI.Label(new Rect(x, y, 230f, 22f), UI.Ellipsis(name, 226f), true);
+            UI.Label(new Rect(x, y, 230f, 24f), UI.Ellipsis(name, 226f), true);
             x += 234f;
 
-            UI.Label(new Rect(x, y, 30f, 22f), "场景", false, true);
+            UI.Label(new Rect(x, y, 30f, 24f), "场景", false, true);
             x += 32f;
-            UI.Label(new Rect(x, y, 74f, 22f),
+            UI.Label(new Rect(x, y, 74f, 24f),
                 SceneInfo.SceneName(director.CurrentScene));
             x += 78f;
 
             // 进度条：当前时间 / 总时长
             if (cur != null && cur.Duration > 0f)
             {
-                UI.Label(new Rect(x, y, 38f, 22f),
+                UI.Label(new Rect(x, y, 40f, 24f),
                     FormatDuration(player.PositionSeconds), false, true);
                 x += 40f;
 
                 float p = player.Progress;
-                var track = new Rect(x, y + 8f, 150f, 6f);
+                var track = new Rect(x, y + 9f, 150f, 6f);
                 UI.Fill(track, new Color(1f, 1f, 1f, 0.15f));
                 UI.Fill(new Rect(track.x, track.y, track.width * p, track.height), UI.Accent);
+
+                // 进度条可点击与拖动跳转
+                var grab = new Rect(track.x - 4f, y + 4f, track.width + 8f, 16f);
+                if (MouseInput.Contains(grab) && MouseInput.Pressed) _seekDrag = true;
+                else if (!MouseInput.Held) _seekDrag = false;
+
+                if (_seekDrag && MouseInput.Held)
+                {
+                    float t = Mathf.Clamp01((MouseInput.Position.x - track.x)
+                        / Mathf.Max(1f, track.width));
+                    player.Seek(t);
+                    p = t;
+                    UI.Fill(new Rect(track.x, track.y, track.width * p, track.height), UI.Accent);
+                    UI.Fill(new Rect(track.x + track.width * p - 3f, y + 6f, 6f, 12f),
+                        Color.white);
+                }
                 x += 156f;
 
-                UI.Label(new Rect(x, y, 38f, 22f),
+                UI.Label(new Rect(x, y, 40f, 24f),
                     FormatDuration(cur.Duration), false, true);
                 x += 42f;
 
                 if (!player.IsPlaying)
                 {
-                    UI.Label(new Rect(x, y, 44f, 22f), "已暂停", false, false, true);
+                    UI.Label(new Rect(x, y, 46f, 24f), "已暂停", false, false, true);
                 }
             }
 
             // 数量统计靠右
-            UI.Label(new Rect(r.xMax - 170f, y, 166f, 22f),
+            UI.Label(new Rect(r.xMax - 170f, y, 166f, 24f),
                 string.Format("用户 {0} 首 / 官方 {1} 首", lib.UserTrackCount, lib.OfficialCount),
                 false, true, false, TextAnchor.MiddleRight);
         }
@@ -389,7 +406,7 @@ namespace SeaPowerDynamicMusic
                 SceneInfo.SceneName(_scene) + "  曲目", true);
 
             // 筛选框：自绘输入，能真正接收键盘
-            var boxW = 150f;
+            var boxW = 190f;
             var box = new Rect(area.xMax - boxW - 58f, area.y, boxW, 20f);
             if (UI.TextField(box, ref _filter, "筛选曲名")) { }
 

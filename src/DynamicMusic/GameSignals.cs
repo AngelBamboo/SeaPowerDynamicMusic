@@ -126,8 +126,7 @@ namespace SeaPowerDynamicMusic
         /// <summary>由 Host 在初始化时设置。为真时拦截游戏起播。</summary>
         internal static bool Blocked = true;
 
-        [HarmonyPrepare]
-        private static bool Prepare()
+        private static bool Resolve()
         {
             try
             {
@@ -187,6 +186,12 @@ namespace SeaPowerDynamicMusic
         /// <summary>把这些方法加入补丁，单独调用以便分别处理重载。</summary>
         internal static void Apply(HarmonyLib.Harmony harmony)
         {
+            // 必须先 Resolve 再打补丁。
+            // Prepare 只有走 Harmony.PatchAll 才会被调用，而本类是手动 Apply 的，
+            // 之前漏掉这一步，_playMusic 等字段全是 null，一个补丁都没打上，
+            // 于是游戏原声从未被拦截，两路音乐一直同时播。
+            if (!Resolve()) return;
+
             var hPlayMusic = new HarmonyLib.HarmonyMethod(
                 typeof(VanillaMusicBlock).GetMethod("Prefix_PlayMusic",
                     System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static));
@@ -202,6 +207,19 @@ namespace SeaPowerDynamicMusic
                 harmony.Patch(_playMusicWithClip, prefix: hPlayMusicWithClip);
             if (_playCurrentlySelected != null)
                 harmony.Patch(_playCurrentlySelected, prefix: hPlaySelected);
+
+            // 打上几个就报几个。全为 0 说明拦截没生效，日志里能直接看出来。
+            int n = (_playMusic != null ? 1 : 0) + (_playMusicWithClip != null ? 1 : 0)
+                    + (_playCurrentlySelected != null ? 1 : 0);
+            if (n > 0)
+            {
+                Plugin.LogInfo(string.Format(
+                    "已拦截游戏音乐起播，覆盖 {0} 个入口。", n));
+            }
+            else
+            {
+                Plugin.LogWarn("未能拦截游戏音乐起播，原声会与自定义音乐同时播放。");
+            }
         }
     }
 
@@ -215,7 +233,6 @@ namespace SeaPowerDynamicMusic
         private static MethodBase _target;
         private static bool _resolved;
 
-        [HarmonyPrepare]
         private static bool Prepare()
         {
             _target = ResolveTarget();
