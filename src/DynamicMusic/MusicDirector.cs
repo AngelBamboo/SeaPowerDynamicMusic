@@ -51,8 +51,6 @@ namespace SeaPowerDynamicMusic
         private float _lastSwitchTime = -999f;
 
         /// <summary>分类内最近播放过的曲目，用于避免立刻重复。</summary>
-        private readonly Dictionary<MusicScene, int> _lastIndex =
-            new Dictionary<MusicScene, int>();
 
         private bool _started;
 
@@ -259,7 +257,11 @@ namespace SeaPowerDynamicMusic
             // 结算画面不等待冷却，立刻切；其余情况遵守冷却
             bool isResult = want == MusicScene.Victory || want == MusicScene.Defeat;
 
-            if (changed && (cooldownPassed || isResult))
+            // 上次试过这个场景但没有可用曲目，冷却期过后不再反复尝试。
+            // 曲目被重新启用时 DrawTrackColumn 会重置标记。
+            bool failed = _failedScene.HasValue && _failedScene.Value == want;
+
+            if (changed && !failed && (cooldownPassed || isResult))
             {
                 SwitchTo(want);
             }
@@ -336,11 +338,16 @@ namespace SeaPowerDynamicMusic
                         return MusicScene.Cruise;
                     break;
                 case MusicScene.MainMenu:
-                case MusicScene.StrategicMap:
-                case MusicScene.Credits:
-                    // 界面场景缺曲目时用巡航音乐顶上，总比没声音好
+                    // 主菜单没有专属曲目时用巡航顶上，总比完全没声音好
                     if (UsableCount(MusicScene.Cruise) > 0)
                         return MusicScene.Cruise;
+                    break;
+                case MusicScene.StrategicMap:
+                case MusicScene.Credits:
+                    // 战略地图与制作名单不再降级到巡航。
+                    // 之前会降到巡航，表现为「回到战略地图却在放战斗/巡航音乐」，
+                    // 听起来像是场景判定错了。这里保持原场景，
+                    // 由 SwitchTo 检测到无候选后不切歌，继续放当前这首。
                     break;
                 case MusicScene.Victory:
                 case MusicScene.Defeat:
@@ -372,12 +379,22 @@ namespace SeaPowerDynamicMusic
             var tracks = _library.GetTracks(scene);
             if (tracks.Count == 0)
             {
+                // 记下「试过但没切过去」，避免每过冷却就重复尝试一次，
+                // 否则日志会被同一条 Verbose 刷满。
+                _failedScene = scene;
                 Plugin.Verbose(string.Format("{0} 分类没有曲目，保持当前播放", scene));
                 return;
             }
 
             MusicTrack next = PickTrack(scene, tracks);
-            if (next == null) return;
+            if (next == null)
+            {
+                _failedScene = scene;
+                Plugin.Verbose(string.Format("{0} 没有可用曲目（已播完或全被排除）", scene));
+                return;
+            }
+
+            _failedScene = null;
 
             // 首次进入不淡入，直接起播；之后都走淡入淡出
             float fade = _lastSwitchTime < 0f ? 0f : _settings.FadeSeconds;
@@ -449,56 +466,149 @@ namespace SeaPowerDynamicMusic
             _lastSwitchTime = Time.unscaledTime;
         }
 
+        /// <summary>
+        /// 选下一首。
+        ///
+        /// 规则（按用户要求）：
+        /// 1. 只在当前场景的候选池里选，优先级不跨场景。
+        /// 2. 按优先级从高到低依次播放：先把最高优先级的曲子播完，
+        ///    全部播过一遍才降到下一档。
+        /// 3. 同一优先级内按权重随机。
+        /// 4. 同一优先级这一轮内每首只播一次。
+        /// 5. 正在播放的那首不参与本次挑选，避免刚播完立刻又轮到它。
+        ///
+        /// 实现方式是维护「已播过的曲目集合」，
+        /// 某一优先级全播完就从集合里移除，重新回到最高档。
+        /// </summary>
         private MusicTrack PickTrack(MusicScene scene, List<MusicTrack> tracks)
         {
-            // 候选池已由 GetTracks 按场景过滤，优先级只在这一池内比较，
-            // 所以高优先级的战斗曲不会跑到主界面去播。
+            // 候选池已由 GetTracks 按场景过滤，优先级只在这一池内比较
             Plugin.Verbose(string.Format("{0} 候选 {1} 首",
                 SceneInfo.SceneName(scene), tracks.Count));
 
-            // 先按优先级分层，只在最高档里挑。全部用完后才降到下一档，
-            // 这样「优先播放某几首」这个需求可以直接用优先级表达。
-            var ready = new List<MusicTrack>();
-            int bestPriority = int.MinValue;
-            for (int i = 0; i < tracks.Count; i++)
+            // 场景切换时清空「已播过」，新场景从头开始
+            if (_roundScene != scene)
             {
-                MusicTrack t = tracks[i];
-                if (!t.IsLoaded || t.Excluded || t.Weight <= 0f) continue;
-                if (!_settings.IncludeOfficial && t.Official) continue;
-                if (t.Priority > bestPriority) bestPriority = t.Priority;
+                _roundScene = scene;
+                _played.Clear();
             }
-            if (bestPriority == int.MinValue) return null;
 
+            // 当前正在播的不参与本次挑选
+            var cur = _player != null ? _player.CurrentTrack : null;
+
+            int best = int.MinValue;
             for (int i = 0; i < tracks.Count; i++)
             {
                 MusicTrack t = tracks[i];
-                if (!t.IsLoaded || t.Excluded || t.Weight <= 0f) continue;
-                if (!_settings.IncludeOfficial && t.Official) continue;
-                if (t.Priority == bestPriority) ready.Add(t);
+                if (!Eligible(t)) continue;
+                if (t == cur) continue;
+                if (_played.Contains(t)) continue;
+                if (t.Priority > best) best = t.Priority;
+            }
+
+            // 最高档全播过了，降到下一档重新开始一轮
+            if (best == int.MinValue)
+            {
+                _played.Clear();
+
+                // 先找不带「排除当前正在播」的全集。
+                // 若这个集合仍为空，说明场景里只有当前这一首可播
+                // （例如某一分类只有一首），此时必须允许重复播放它，
+                // 否则会返回 null 造成静音。
+                for (int i = 0; i < tracks.Count; i++)
+                {
+                    MusicTrack t = tracks[i];
+                    if (!Eligible(t)) continue;
+                    if (_played.Contains(t)) continue;
+                    if (t.Priority > best) best = t.Priority;
+                }
+
+                if (best == int.MinValue)
+                {
+                    // 只有正在播的这一首，退回「排除它自己」之外的全部候选
+                    for (int i = 0; i < tracks.Count; i++)
+                    {
+                        MusicTrack t = tracks[i];
+                        if (!Eligible(t)) continue;
+                        if (t == cur) continue;
+                        if (t.Priority > best) best = t.Priority;
+                    }
+
+                    if (best == int.MinValue)
+                    {
+                        // 连一首可播的都没有，单独放行当前这首，避免静音
+                        if (cur != null && Eligible(cur))
+                        {
+                            Plugin.Verbose(string.Format(
+                                "{0} 只有一首可播，循环播放", SceneInfo.SceneName(scene)));
+                            return cur;
+                        }
+                        return null;
+                    }
+
+                    Plugin.Verbose(string.Format(
+                        "{0} 排除当前曲后仍无候选，允许重复播放当前这首",
+                        SceneInfo.SceneName(scene)));
+                }
+                Plugin.Verbose(string.Format("{0} 本轮播完，降到优先级 {1} 重新开始",
+                    SceneInfo.SceneName(scene), best));
+            }
+
+            var ready = new List<MusicTrack>();
+            bool allowCur = false;
+            for (int i = 0; i < tracks.Count; i++)
+            {
+                MusicTrack t = tracks[i];
+                if (!Eligible(t)) continue;
+                if (t == cur) continue;
+                if (_played.Contains(t)) continue;
+                if (t.Priority == best) ready.Add(t);
+            }
+
+            // 这一档没有「除当前曲之外」的候选时，把当前曲加回来，
+            // 保证单曲分类能循环播放而不是静音。
+            if (ready.Count == 0 && cur != null && Eligible(cur)
+                && cur.Priority == best)
+            {
+                ready.Add(cur);
+                allowCur = true;
+                Plugin.Verbose(string.Format("{0} 本档仅剩当前曲，循环播放",
+                    SceneInfo.SceneName(scene)));
             }
             if (ready.Count == 0) return null;
 
-            MusicTrack chosen;
-            if (_settings.Shuffle)
-            {
-                chosen = WeightedPick(ready);
-            }
-            else
-            {
-                int prev;
-                _lastIndex.TryGetValue(scene, out prev);
-                chosen = ready[(prev + 1) % ready.Count];
-            }
+            MusicTrack chosen = _settings.Shuffle
+                ? WeightedPick(ready)
+                : ready[0];
 
-            int idx = ready.IndexOf(chosen);
-            if (idx >= 0) _lastIndex[scene] = idx;
+            if (!allowCur) _played.Add(chosen);
+            Plugin.Verbose(string.Format("{0} 选中 {1}（优先级 {2}，本档剩 {3} 首）",
+                SceneInfo.SceneName(scene), chosen.DisplayName, chosen.Priority,
+                ready.Count - 1));
             return chosen;
         }
 
+        /// <summary>曲目是否具备播放资格。</summary>
+        private bool Eligible(MusicTrack t)
+        {
+            if (t == null || !t.IsLoaded || t.Excluded || t.Weight <= 0f) return false;
+            if (!_settings.IncludeOfficial && t.Official) return false;
+            return true;
+        }
+
+        /// <summary>本场景中已经播过的曲目。同一优先级内每首只播一次。</summary>
+        private readonly HashSet<MusicTrack> _played = new HashSet<MusicTrack>();
+
+        /// <summary>_played 所属的场景，切换场景时清空。</summary>
+        private MusicScene? _roundScene;
+
         /// <summary>
-        /// 按权重随机抽一首。权重大的被抽中概率更高。
-        /// 全部权重相同时退化为等概率随机。
+        /// 上次尝试切换但失败的目标场景。
+        /// 避免每过冷却就重试一次，日志与调度都被无谓地反复触发。
+        /// 曲目被重新启用时会被清空。
         /// </summary>
+        internal MusicScene? _failedScene;
+
         private MusicTrack WeightedPick(List<MusicTrack> pool)
         {
             if (pool.Count == 1) return pool[0];
@@ -559,7 +669,7 @@ namespace SeaPowerDynamicMusic
             MusicTrack next = PickTrack(_currentScene, tracks);
             if (next == null) return;
 
-            // 单曲分类直接把进度归零重播，避免出现空档
+            // 自动接下一首，跨曲淡入淡出
             _player.CrossfadeTo(next, Mathf.Min(1.5f, _settings.FadeSeconds));
         }
 

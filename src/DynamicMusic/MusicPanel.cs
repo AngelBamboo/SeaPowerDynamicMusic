@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using UnityEngine;
 
 namespace SeaPowerDynamicMusic
@@ -22,8 +23,6 @@ namespace SeaPowerDynamicMusic
         private bool _visible;
         private float _trackScroll;
         private static bool _barDragging;
-        private static string _diagText;
-        private static float _diagTime = -99f;
         private static bool _seekDrag;
         private static float _seekPreview;
         private SceneGroup _group = SceneGroup.Mission;
@@ -302,8 +301,13 @@ namespace SeaPowerDynamicMusic
 
         private void DrawTitleBar()
         {
-            var r = new Rect(_window.x + 1f, _window.y + 1f, _window.width - 2f, 26f);
+            var r = new Rect(_window.x + 1f, _window.y + 1f, _window.width - 336f, 26f);
             UI.Label(r, "动态音乐  Dynamic Music", true, false, false, TextAnchor.MiddleCenter);
+
+            // 右上角作者与项目地址。浅色小字，不抢主标题的视线。
+            UI.Label(new Rect(_window.xMax - 330f, r.y, 322f, r.height),
+                "作者 Angel.Bamboo   github.com/AngelBamboo/SeaPowerDynamicMusic",
+                false, true, false, TextAnchor.MiddleRight);
 
             // 供 F9 校准用：标题栏中心就是校准参考点
             MouseInput.TitleBarGuiY = r.center.y;
@@ -348,8 +352,18 @@ namespace SeaPowerDynamicMusic
             foreach (SceneGroup g in new[] { SceneGroup.Interface, SceneGroup.Mission,
                                             SceneGroup.Result, SceneGroup.Other })
             {
+                // 按曲目去重。一首曲子可以归入多个场景，
+                // 直接把各场景的数量相加会重复统计
+                // （「战役音乐 39」里平静巡航的 11 与发现敌情的 14 有重叠）。
                 int n = 0;
-                foreach (MusicScene s in SceneInfo.ScenesIn(g)) n += lib.GetTracks(s).Count;
+                var counted = new HashSet<MusicTrack>();
+                foreach (MusicScene sc in SceneInfo.ScenesIn(g))
+                {
+                    foreach (MusicTrack t in lib.GetTracks(sc))
+                    {
+                        if (counted.Add(t)) n++;
+                    }
+                }
 
                 var r = new Rect(area.x, y, area.width - 30f, 26f);
                 // 一级分类用更明显的底色区分层级
@@ -571,6 +585,7 @@ namespace SeaPowerDynamicMusic
                 t.Excluded = !on;
                 // 启用时给一个非零权重，否则调度器认为它不可用
                 t.Weight = on ? Mathf.Max(t.Weight, 0.5f) : 0f;
+                if (on) ClearFailedScene();
                 SetStatus((on ? "已启用 " : "已停用 ") + t.DisplayName);
             }
 
@@ -631,6 +646,7 @@ namespace SeaPowerDynamicMusic
                 var lib = Plugin.Instance.Library;
                 if (lib != null) lib.RebuildIndex();
                 MusicDirector.WriteTrackSettingsToFile();
+                ClearFailedScene();
             }
         }
 
@@ -704,6 +720,7 @@ namespace SeaPowerDynamicMusic
             if (UI.Click(new Rect(xScan, y, wScan, bh), "重新扫描"))
             {
                 SaveAll(lib, settings);
+                ClearFailedScene();
                 if (host != null) host.RequestRescan();
                 SetStatus("开始重新扫描…");
             }
@@ -750,27 +767,25 @@ namespace SeaPowerDynamicMusic
             }
             else
             {
-                // 诊断信息每 0.5 秒刷新一次即可。
-                // 这些数字不需要每帧更新，而 string.Format 带多个
-                // 数值格式化在每帧几十次的调用下纯属浪费。
-                float now = Time.unscaledTime;
-                if (now - _diagTime >= 0.5f || _diagText == null)
-                {
-                    _diagTime = now;
-                    _diagText = string.Format(
-                        "输入 {0} | 鼠标 {1:F0},{2:F0} | 按下 {3} | 边沿 {4} | 松开 {5} | {6}",
-                        MouseInput.DeviceFound ? MouseInput.Source : "无设备",
-                        MouseInput.GuiPosition.x, MouseInput.GuiPosition.y,
-                        MouseInput.RawHeld ? "是" : "否",
-                        MouseInput.RawPressed ? "按下"
-                            : (MouseInput.RawReleased ? "松开" : "无"),
-                        _clickCount,
-                        _updateCount > 0 ? "Update 正常" : "Update 未运行");
-                }
-
+                // 底部提示：操作说明 + 作者与项目地址。
+                // 之前这里放的是排查输入用的诊断信息，对玩家没有意义，已换掉。
                 UI.Label(new Rect(_window.x + 12f, y + 20f, _window.width - 24f, 18f),
-                    _diagText, false, true, !MouseInput.DeviceFound || _updateCount == 0);
+                    string.Format(
+                        "{0} 开关面板 · 勾选「启用」让曲目参与播放 · 权重决定同档内被抽中的概率，" +
+                        "为 0 不参与 · 优先数字越大越先播，同档每首播完一轮才降档",
+                        ModConfig.PanelKey), false, true);
+
             }
+        }
+
+        /// <summary>
+        /// 清除「该场景无可用曲目」的标记。
+        /// 用户改了曲目的启用或归属后，之前判定为空的场景可能又有曲了。
+        /// </summary>
+        private static void ClearFailedScene()
+        {
+            var d = Plugin.Instance != null ? Plugin.Instance.Director : null;
+            if (d != null) d._failedScene = null;
         }
 
         private void SaveAll(MusicLibrary lib, MusicSettings settings)
