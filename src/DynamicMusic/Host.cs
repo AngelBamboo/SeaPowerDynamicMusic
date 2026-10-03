@@ -278,6 +278,11 @@ namespace SeaPowerDynamicMusic
             }
             else
             {
+                // 从原版模式切回来时，游戏自己那首还在放着。
+                // 拦截 Prefix 只管「以后起播」，管不了已在播的，
+                // 所以切回前必须显式停一次，否则两路叠着响。
+                VanillaMusicBlock.StopCurrentMusic();
+
                 if (Director != null) Director.Resume();
                 Plugin.LogInfo(BlockVanilla
                     ? "已接管音乐播放，游戏原生音乐将被拦截。"

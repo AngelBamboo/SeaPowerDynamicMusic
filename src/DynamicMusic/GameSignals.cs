@@ -221,6 +221,39 @@ namespace SeaPowerDynamicMusic
                 Plugin.LogWarn("未能拦截游戏音乐起播，原声会与自定义音乐同时播放。");
             }
         }
+
+        /// <summary>
+        /// 强制停掉游戏当前正在播放的曲子。
+        ///
+        /// 拦截 Prefix 只能阻止「以后起播」，游戏已经在放的那首不会停，
+        /// 于是从原版模式切回接管时两路叠在一起。切回前必须显式停一次。
+        /// 只调 Stop，不用 RemoveCurrentTrack——后者会删掉 _allClips 数据。
+        /// </summary>
+        internal static void StopCurrentMusic()
+        {
+            try
+            {
+                Type t = AccessTools.TypeByName("SeaPower.MusicManager");
+                if (t == null || t.BaseType == null) return;
+
+                var getter = AccessTools.Method(t.BaseType, "get_Instance");
+                if (getter == null) return;
+
+                object manager = getter.Invoke(null, null);
+                if (manager == null) return;
+
+                var stop = AccessTools.Method(t, "Stop");
+                if (stop != null)
+                {
+                    stop.Invoke(manager, null);
+                    Plugin.LogInfo("已停掉游戏当前播放的曲子，避免与自定义音乐叠加。");
+                }
+            }
+            catch (Exception e)
+            {
+                Plugin.Verbose("停掉游戏当前音乐失败: " + e.Message);
+            }
+        }
     }
 
     /// <summary>
