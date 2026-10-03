@@ -26,7 +26,7 @@ namespace SeaPowerDynamicMusic
         private static bool _seekDrag;
         private static float _seekPreview;
         private SceneGroup _group = SceneGroup.Mission;
-        private MusicScene _scene = MusicScene.Cruise;
+        private MusicScene _scene = MusicScene.Nato;
         private string _status = "";
         private float _statusUntil;
         private string _filter = "";
@@ -306,7 +306,7 @@ namespace SeaPowerDynamicMusic
             const float authorW = 152f;
             var r = new Rect(_window.x + 1f, _window.y + 1f,
                 _window.width - authorW - 2f, 26f);
-            UI.Label(r, "动态音乐  Dynamic Music  v" + Plugin.ShortVersion,
+            UI.Label(r, "动态音乐  Dynamic Music  v" + Plugin.Version,
                 true, false, false, TextAnchor.MiddleCenter);
 
             // 右上角只放作者信息，GitHub 地址在右下角

@@ -194,9 +194,9 @@ namespace SeaPowerDynamicMusic
         {
             string root = ModConfig.LibraryRoot;
             Plugin.LogWarn("音乐库为空。把 mp3/ogg/wav 放进下面这些文件夹即可被识别：");
-            Plugin.LogWarn("  " + root + "\\Cruise\\   （平静巡航）");
-            Plugin.LogWarn("  " + root + "\\Tension\\  （发现敌情）");
-            Plugin.LogWarn("  " + root + "\\Combat\\   （交战）");
+            Plugin.LogWarn("  " + root + "\\Nato\\    （北约）");
+            Plugin.LogWarn("  " + root + "\\WP\\      （华约）");
+            Plugin.LogWarn("  " + root + "\\Night\\   （夜间）");
             Plugin.LogWarn("  " + root + "\\Victory\\  （胜利）");
             Plugin.LogWarn("  " + root + "\\Defeat\\   （失败）");
             Plugin.LogWarn("  " + root + "\\MainMenu\\ （主菜单）");

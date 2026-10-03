@@ -37,17 +37,9 @@ namespace SeaPowerDynamicMusic
         /// 之前靠 _lastCombatSignal 初值 -999 与 now 相减来间接判断，
         /// 一旦某处把计时器重置成 Time.unscaledTime 就无法区分
         /// 「刚收到信号」与「从初始值到现在恰好在阈值内」。
-        /// 显式标志位不再依赖这种巧合。
-        /// </summary>
-        private bool _combatSignalSeen;
-        private bool _tensionSignalSeen;
-
         /// <summary>正在播放的分类。</summary>
         private MusicScene _currentScene;
 
-        /// <summary>上一次收到各类信号的时间（Time.unscaledTime）。</summary>
-        private float _lastCombatSignal = -999f;
-        private float _lastTensionSignal = -999f;
         private float _lastSwitchTime = -999f;
 
         /// <summary>分类内最近播放过的曲目，用于避免立刻重复。</summary>
@@ -80,13 +72,11 @@ namespace SeaPowerDynamicMusic
 
         private void OnEnable()
         {
-            GameSignals.VoiceEvent += OnVoice;
             GameSignals.MusicModeChanged += OnMusicMode;
         }
 
         private void OnDisable()
         {
-            GameSignals.VoiceEvent -= OnVoice;
             GameSignals.MusicModeChanged -= OnMusicMode;
         }
 
@@ -96,41 +86,20 @@ namespace SeaPowerDynamicMusic
             _started = true;
             _player.SetVolume(_settings.Volume);
 
-            // 优先播主菜单音乐；用户只放了巡航音乐时也能听到声音，便于确认插件已工作
+            // 优先播主菜单音乐；用户只放了战役音乐时也能听到声音，便于确认插件已工作
             if (_library.GetTracks(MusicScene.MainMenu).Count > 0)
             {
                 ForceSwitch(MusicScene.MainMenu, 0f);
             }
-            else if (_library.GetTracks(MusicScene.Cruise).Count > 0)
+            else if (_library.GetTracks(MusicScene.Nato).Count > 0)
             {
-                ForceSwitch(MusicScene.Cruise, 0f);
+                ForceSwitch(MusicScene.Nato, 0f);
             }
         }
 
         // ------------------------------------------------------------------
         // 信号处理
         // ------------------------------------------------------------------
-
-        private void OnVoice(string key)
-        {
-            if (string.IsNullOrEmpty(key)) return;
-
-            if (CombatSignals.Contains(key))
-            {
-                _lastCombatSignal = Time.unscaledTime;
-                _combatSignalSeen = true;
-                // 开火同时也说明已经接敌
-                _lastTensionSignal = Time.unscaledTime;
-                _tensionSignalSeen = true;
-                Plugin.Verbose("战况信号(交战): " + key);
-            }
-            else if (TensionSignals.Contains(key))
-            {
-                _lastTensionSignal = Time.unscaledTime;
-                _tensionSignalSeen = true;
-                Plugin.Verbose("战况信号(接触): " + key);
-            }
-        }
 
         private void OnMusicMode(string mode)
         {
@@ -145,40 +114,26 @@ namespace SeaPowerDynamicMusic
                     // 于是主菜单里又出现战斗音乐。
                     _inMission = false;
                     _side = AllianceSide.None;
-                    _combatSignalSeen = false;
-                    _tensionSignalSeen = false;
                     _sceneOverride = MusicScene.MainMenu;
                     break;
                 case "StrategicMap":
                     _inMission = false;
                     _side = AllianceSide.None;
-                    _combatSignalSeen = false;
-                    _tensionSignalSeen = false;
                     _sceneOverride = MusicScene.StrategicMap;
                     break;
                 case "Credits":
                     // 制作名单已从场景枚举里移除，这里按非战役处理即可
                     _inMission = false;
-                    _combatSignalSeen = false;
-                    _tensionSignalSeen = false;
                     _sceneOverride = null;
                     break;
                 case "Victory":
                     _inMission = false;
-                    _combatSignalSeen = false;
-                    _tensionSignalSeen = false;
                     _sceneOverride = MusicScene.Victory;
                     // 结算音乐不该被随后的战况信号顶掉
-                    _lastCombatSignal = -999f;
-                    _lastTensionSignal = -999f;
                     break;
                 case "Defeat":
                     _inMission = false;
-                    _combatSignalSeen = false;
-                    _tensionSignalSeen = false;
                     _sceneOverride = MusicScene.Defeat;
-                    _lastCombatSignal = -999f;
-                    _lastTensionSignal = -999f;
                     break;
                 case "NATO":
                 case "WP":
@@ -189,10 +144,6 @@ namespace SeaPowerDynamicMusic
                     _side = AllianceSideOf(mode);
                     _dumpedMetadata = false;
                     _sceneOverride = null;
-                    _combatSignalSeen = false;
-                    _tensionSignalSeen = false;
-                    _lastCombatSignal = -999f;
-                    _lastTensionSignal = -999f;
                     break;
                 case "Game":
                     // 游戏在主菜单也会周期性设成 Game，与 MainMenu 交替出现。
@@ -203,16 +154,12 @@ namespace SeaPowerDynamicMusic
                     // 保持 _sceneOverride 为空即可，战况计时不受影响。
                     // 但要标记离开战役：主菜单不该按战况选曲。
                     _inMission = false;
-                    _combatSignalSeen = false;
-                    _tensionSignalSeen = false;
                     _sceneOverride = null;
                     break;
                 default:
                     // 未知模式：保守当作不在战役内。
                     // 宁可放主菜单音乐，也不要在主菜单里切战斗曲。
                     _inMission = false;
-                    _combatSignalSeen = false;
-                    _tensionSignalSeen = false;
                     _sceneOverride = null;
                     break;
             }
@@ -232,8 +179,6 @@ namespace SeaPowerDynamicMusic
         /// <summary>任务开始/结束时由插件调用，重置战况计时。</summary>
         public void ResetCombatState()
         {
-            _lastCombatSignal = -999f;
-            _lastTensionSignal = -999f;
             _sceneOverride = null;
         }
 
@@ -326,39 +271,60 @@ namespace SeaPowerDynamicMusic
                 return ResolveWithFallback(_sceneOverride.Value);
             }
 
-            // 只有真正进入战役（场景为 Cruise / Tension / Combat）才按战况选曲。
-            // 主菜单与战略地图下若也走战况判定，游戏周期性发来的模式信号
-            // 会把场景在两首完全不同的曲子之间来回切。
             if (!_inMission)
             {
                 return ResolveWithFallback(MusicScene.MainMenu);
             }
 
-            float now = Time.unscaledTime;
-
-            // 交战：必须真的收到过交战信号，且距今未超过 CombatExitDelay。
-            // 之前写成 sinceCombat <= CombatExitDelay，
-            // 语义是「离上次交战信号越久越算交战」，正好反了。
-            bool inCombat = _combatSignalSeen
-                && (now - _lastCombatSignal) < _settings.CombatExitDelay;
-            if (inCombat)
+            // 战役内：按阵营选，夜间曲子作为该阵营的补充。
+            //
+            // 不再按战况（巡航／紧张／交战）切换。
+            // 游戏自己的 MusicClipData._side 只有 nato / wp / night 三种，
+            // 战况三态在游戏数据里并不存在，之前的判定是模组自己造的，
+            // 切换时与游戏的状态不同步，听感上很突兀。
+            if (_side == AllianceSide.WP)
             {
-                return ResolveWithFallback(MusicScene.Combat);
+                return ResolveWithFallback(MusicScene.WP);
             }
 
-            // 紧张：收到过紧张信号且未超时。60 秒是「发现敌情」的合理持续时间，
-            // 同样用显式标志位，不靠 -999 初值与 now 的大小关系去凑。
-            if (_tensionSignalSeen && (now - _lastTensionSignal) < 60f)
+            if (NightPreferred)
             {
-                return ResolveWithFallback(MusicScene.Tension);
+                return ResolveWithFallback(MusicScene.Night);
             }
 
-            return ResolveWithFallback(MusicScene.Cruise);
+            return ResolveWithFallback(MusicScene.Nato);
+        }
+
+        /// <summary>
+        /// 是否优先播放夜间音乐。
+        ///
+        /// 夜间是独立于阵营的一组曲子（实测 _side = night，共 6 首）。
+        /// 默认不优先，只有玩家在面板里把「夜间」的权重调高、
+        /// 或该阵营没有曲子时才用上。若需要随时切夜间，
+        /// 可以把这个判断改为读取游戏时间或场景亮度。
+        /// </summary>
+        private bool NightPreferred
+        {
+            get
+            {
+                // 夜间曲子可播，且所属阵营没有曲子时用夜间兜底
+                return _preferNight;
+            }
+        }
+
+        private bool _preferNight;
+
+        /// <summary>设置是否优先夜间音乐。</summary>
+        internal void SetPreferNight(bool value)
+        {
+            _preferNight = value;
         }
 
         /// <summary>
         /// 分类没有可用曲目时逐级退让，保证用户只准备了一部分音乐也能正常出声。
-        /// 例如只放了巡航音乐时，交战阶段会继续放巡航音乐而不是静音。
+        /// <summary>
+        /// 分类没有可用曲目时逐级退让，保证用户只准备了一部分音乐也能正常出声。
+        /// 例如只放了华约音乐时，北约场景会继续放华约音乐而不是静音。
         /// </summary>
         private MusicScene ResolveWithFallback(MusicScene scene)
         {
@@ -366,24 +332,25 @@ namespace SeaPowerDynamicMusic
 
             switch (scene)
             {
-                case MusicScene.Combat:
-                    if (UsableCount(MusicScene.Tension) > 0)
-                        return MusicScene.Tension;
-                    goto case MusicScene.Tension;
-                case MusicScene.Tension:
-                    if (UsableCount(MusicScene.Cruise) > 0)
-                        return MusicScene.Cruise;
+                case MusicScene.WP:
+                    // 华约没有曲子时先用北约顶上
+                    if (UsableCount(MusicScene.Nato) > 0) return MusicScene.Nato;
+                    if (UsableCount(MusicScene.Night) > 0) return MusicScene.Night;
+                    break;
+                case MusicScene.Nato:
+                    if (UsableCount(MusicScene.Night) > 0) return MusicScene.Night;
+                    if (UsableCount(MusicScene.WP) > 0) return MusicScene.WP;
+                    break;
+                case MusicScene.Night:
+                    // 夜间没有时用当前阵营顶上
+                    var alt = _side == AllianceSide.WP ? MusicScene.WP : MusicScene.Nato;
+                    if (UsableCount(alt) > 0) return alt;
                     break;
                 case MusicScene.MainMenu:
-                    // 主菜单没有专属曲目时用巡航顶上，总比完全没声音好
-                    if (UsableCount(MusicScene.Cruise) > 0)
-                        return MusicScene.Cruise;
-                    break;
                 case MusicScene.StrategicMap:
-                    // 战略地图不再降级到巡航。
-                    // 之前会降到巡航，表现为「回到战略地图却在放战斗/巡航音乐」，
-                    // 听起来像是场景判定错了。这里保持原场景，
-                    // 由 SwitchTo 检测到无候选后不切歌，继续放当前这首。
+                    // 界面场景缺曲目时用战役音乐顶上，总比完全没声音好。
+                    // 保持同属一个场景大类，播放进度不会因此重置。
+                    if (UsableCount(MusicScene.Nato) > 0) return MusicScene.Nato;
                     break;
                 case MusicScene.Victory:
                 case MusicScene.Defeat:
@@ -392,7 +359,6 @@ namespace SeaPowerDynamicMusic
             }
             return scene;
         }
-
         /// <summary>某分类下实际可播放的曲目数：已加载、未排除、权重大于零。</summary>
         /// <summary>
         /// 统计某场景下真正可播的曲目数。
@@ -489,7 +455,7 @@ namespace SeaPowerDynamicMusic
             _started = true;
             _lastSwitchTime = Time.unscaledTime;
 
-            // 不要写死 Cruise。之前切回接管时一律跳到巡航，
+            // 不要写死某个场景。之前切回接管时一律跳到固定分类，
             // 若玩家当时在胜利画面或战略地图，听到的音乐会与场景不符。
             // 交给 Update 去 EvaluateScene 判定真实场景，符合「场景跟随」的预期。
             _currentScene = MusicScene.Unassigned;
@@ -952,56 +918,5 @@ namespace SeaPowerDynamicMusic
         }
     }
 
-    /// <summary>语音键名到战况等级的映射。</summary>
-    internal static class CombatSignals
-    {
-        /// <summary>出现这些通报说明已经交火。</summary>
-        private static readonly HashSet<string> Combat = new HashSet<string>(
-            StringComparer.OrdinalIgnoreCase)
-        {
-            // 我方开火
-            "WeaponAway", "SalvoFire", "SAMFired", "ASHMFired", "ASUMFired",
-            "AAM_SARH_Fired", "AAM_IR_Fired", "AAM_ARS_Fired", "AircraftGunsFired",
-            "BombsAway", "ARMFiredAir", "TorpedoFiredAir", "LaunchAtTarget",
-            "EngageTrack", "EngagingTrack", "ChaffOut", "DecoyOut",
-            // 遭到攻击
-            "MissileIncoming", "MissileIncoming_Surface", "MissileIncoming_Sam",
-            "TorpedoIncoming", "UnderFire", "EvasiveManuever", "TargetedByRadar",
-            "BeingJammed", "Vampire",
-            // 命中与损失
-            "HitTrack", "WeHit", "DamagedNeedHelp", "AbandonShip",
-            "FloodingAbandonShip", "ImGoingDown", "SplashedTrack",
-            "EnemyShipDestroyed", "AirHitAir", "AirHitSurface", "AirHitLand",
-            "CannotComplyNoAmmo", "Winchester"
-        };
 
-        internal static bool Contains(string key)
-        {
-            return Combat.Contains(key);
-        }
-    }
-
-    internal static class TensionSignals
-    {
-        /// <summary>出现这些通报说明发现敌情，但尚未打起来。</summary>
-        private static readonly HashSet<string> Tension = new HashSet<string>(
-            StringComparer.OrdinalIgnoreCase)
-        {
-            "Contact", "Contacts", "New", "NewF", "Multiple",
-            "NewContact", "NewContactMultiple", "ContactAir", "ContactAirF", "ContactAirM",
-            "ContactSurface", "ContactSurfaceF", "ContactSurfaceM",
-            "ContactSubmerged", "ContactSubmergedF", "ContactSubmergedM",
-            "ContactLand", "ContactLandF", "ContactLandM",
-            "RadarContact", "ESMContact", "PassiveContact", "ActiveContact",
-            "VisualContact", "RadarEmission", "LaunchTransient",
-            "BouyContact", "MADContact", "DesignateTrack",
-            "Hostile", "HostileF", "HostileM", "HostileS",
-            "NewIntelReceived", "NewTaskReceived"
-        };
-
-        internal static bool Contains(string key)
-        {
-            return Tension.Contains(key);
-        }
-    }
 }

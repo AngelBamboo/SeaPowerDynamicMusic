@@ -25,14 +25,14 @@ namespace SeaPowerDynamicMusic
             { "主菜单",        MusicScene.MainMenu },
             { "StrategicMap",  MusicScene.StrategicMap },
             { "战略地图",      MusicScene.StrategicMap },
-            { "Cruise",        MusicScene.Cruise },
-            { "巡航",          MusicScene.Cruise },
-            { "平静",          MusicScene.Cruise },
-            { "Tension",       MusicScene.Tension },
-            { "紧张",          MusicScene.Tension },
-            { "Combat",        MusicScene.Combat },
-            { "交战",          MusicScene.Combat },
-            { "战斗",          MusicScene.Combat },
+            { "Nato",          MusicScene.Nato },
+            { "NATO",          MusicScene.Nato },
+            { "北约",          MusicScene.Nato },
+            { "WP",            MusicScene.WP },
+            { "华约",          MusicScene.WP },
+            { "Night",         MusicScene.Night },
+            { "夜间",          MusicScene.Night },
+            { "夜晚",          MusicScene.Night },
             { "Victory",       MusicScene.Victory },
             { "胜利",          MusicScene.Victory },
             { "Defeat",        MusicScene.Defeat },
@@ -162,12 +162,13 @@ namespace SeaPowerDynamicMusic
                 }
             }
 
-            // 根目录下直接放置的音频文件
-            count += AddFilesFrom(root, MusicScene.Cruise, false, true);
+            // 根目录下直接放置的音频文件归入「未归类」，
+            // 面板里能看到并自行勾选归属，不硬塞进某个场景。
+            count += AddFilesFrom(root, MusicScene.Unassigned, false, true);
             return count;
         }
 
-        /// <summary>按子文件夹名扫描。直接放在根目录的文件归入 Cruise。</summary>
+        /// <summary>按子文件夹名扫描。直接放在根目录的文件归入「未归类」。</summary>
         private int ScanFolders(string libraryRoot)
         {
             int count = 0;

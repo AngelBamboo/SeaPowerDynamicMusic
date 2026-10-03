@@ -29,17 +29,6 @@ namespace SeaPowerDynamicMusic
         public const string Name = "Sea Power Dynamic Music";
         public const string Version = "1.0.0";
 
-        /// <summary>面板显示用的短版本号，如 v1.0。</summary>
-        public static string ShortVersion
-        {
-            get
-            {
-                var v = Version;
-                int lastDot = v.LastIndexOf('.');
-                return lastDot > 0 ? v.Substring(0, lastDot) : v;
-            }
-        }
-
         internal static ManualLogSource Log;
 
         /// <summary>运行时宿主，挂载所有组件。</summary>

@@ -141,14 +141,14 @@ namespace SeaPowerDynamicMusic
             sb.AppendLine("# 呼出面板的快捷键，可选 F7 / F8 / F9 / Insert / Home");
             sb.AppendLine("Hotkey=F7");
             sb.AppendLine();
-            sb.AppendLine("# 下面按场景归类。某个分类没有曲目时会自动退让到 Cruise。");
+            sb.AppendLine("# 下面按场景归类。某个分类没有曲目时会自动退让到其他分类。");
             sb.AppendLine();
             foreach (MusicScene scene in Enum.GetValues(typeof(MusicScene)))
             {
                 sb.Append('[').Append(scene.ToString()).AppendLine("]");
-                if (scene == MusicScene.Cruise)
+                if (scene == MusicScene.Nato)
                 {
-                    sb.AppendLine("#;Track01=example_cruise.mp3");
+                    sb.AppendLine("#;Track01=example_nato.mp3");
                 }
                 sb.AppendLine();
             }

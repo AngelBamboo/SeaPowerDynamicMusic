@@ -9,25 +9,22 @@ using UnityEngine;
 namespace SeaPowerDynamicMusic
 {
     /// <summary>
-    /// 音乐场景分类。决定一首曲子什么时候会被播放。
-    ///
-    /// 面板按三级组织：
-    ///   一级：界面音乐 / 战役音乐 / 结算音乐
-    ///   二级：具体场景（本枚举的值）
-    ///   三级：该场景下的曲目
+    /// 音乐场景。取值与游戏的 MusicClipData._side 一一对应，
+    /// 官方音乐按该字段直接归类，不再靠包名猜。
+    /// 实测取值：mainmenu / strategicmap / nato / wp / night / victory / defeat。
     /// </summary>
     public enum MusicScene
     {
         /// <summary>主菜单。</summary>
         MainMenu,
-        /// <summary>战略地图 / 战役界面。</summary>
+        /// <summary>战略地图。</summary>
         StrategicMap,
-        /// <summary>平静巡航，没有敌情。</summary>
-        Cruise,
-        /// <summary>发现敌方接触，局势紧张但尚未开火。</summary>
-        Tension,
-        /// <summary>交战中。</summary>
-        Combat,
+        /// <summary>北约战役内音乐。</summary>
+        Nato,
+        /// <summary>华约战役内音乐。</summary>
+        WP,
+        /// <summary>夜间战役内音乐。</summary>
+        Night,
         /// <summary>任务胜利结算。</summary>
         Victory,
         /// <summary>任务失败结算。</summary>
@@ -39,7 +36,19 @@ namespace SeaPowerDynamicMusic
         Unassigned
     }
 
-    /// <summary>面板一级分组。</summary>
+    /// <summary>场景大类，用于面板的两级结构与播放进度的重置判断。</summary>
+    public enum SceneGroup
+    {
+        /// <summary>界面音乐：主菜单、战略地图。</summary>
+        Interface,
+        /// <summary>战役音乐：北约、华约、夜间。</summary>
+        Mission,
+        /// <summary>结算音乐：胜利、失败。</summary>
+        Result,
+        /// <summary>未归类：不属于以上任何场景的曲子。</summary>
+        Other
+    }
+
     /// <summary>战役阵营。用于决定该放哪一方的官方音乐。</summary>
     public enum AllianceSide
     {
@@ -51,28 +60,21 @@ namespace SeaPowerDynamicMusic
         WP
     }
 
-    public enum SceneGroup
+    /// <summary>场景的归类与显示信息。</summary>
+    internal static class SceneInfo
     {
-        /// <summary>界面音乐：主菜单、战略地图、制作名单。</summary>
-        Interface,
-        /// <summary>战役音乐：平静巡航、发现敌情、交战。</summary>
-        Mission,
-        /// <summary>结算音乐：胜利、失败。</summary>
-        Result,
-        /// <summary>未归类：不属于以上任何场景的曲子。</summary>
-        Other
-    }
-
-    public static class SceneInfo
-    {
-        /// <summary>场景所属的一级分组。</summary>
-        public static SceneGroup GroupOf(MusicScene scene)
+        /// <summary>该场景属于哪个大类。</summary>
+        internal static SceneGroup GroupOf(MusicScene scene)
         {
             switch (scene)
             {
                 case MusicScene.MainMenu:
                 case MusicScene.StrategicMap:
                     return SceneGroup.Interface;
+                case MusicScene.Nato:
+                case MusicScene.WP:
+                case MusicScene.Night:
+                    return SceneGroup.Mission;
                 case MusicScene.Victory:
                 case MusicScene.Defeat:
                     return SceneGroup.Result;
@@ -83,26 +85,29 @@ namespace SeaPowerDynamicMusic
             }
         }
 
-        public static string GroupName(SceneGroup g)
+        /// <summary>大类显示名。</summary>
+        internal static string GroupName(SceneGroup g)
         {
             switch (g)
             {
                 case SceneGroup.Interface: return "界面音乐";
+                case SceneGroup.Mission: return "战役音乐";
                 case SceneGroup.Result: return "结算音乐";
                 case SceneGroup.Other: return "未归类";
                 default: return "战役音乐";
             }
         }
 
-        public static string SceneName(MusicScene s)
+        /// <summary>场景显示名。</summary>
+        internal static string SceneName(MusicScene s)
         {
             switch (s)
             {
                 case MusicScene.MainMenu: return "主菜单";
                 case MusicScene.StrategicMap: return "战略地图";
-                case MusicScene.Cruise: return "平静巡航";
-                case MusicScene.Tension: return "发现敌情";
-                case MusicScene.Combat: return "交战";
+                case MusicScene.Nato: return "北约";
+                case MusicScene.WP: return "华约";
+                case MusicScene.Night: return "夜间";
                 case MusicScene.Victory: return "胜利";
                 case MusicScene.Defeat: return "失败";
                 case MusicScene.Unassigned: return "未归类";
@@ -110,23 +115,24 @@ namespace SeaPowerDynamicMusic
             }
         }
 
-        /// <summary>各分组的场景顺序，面板按此顺序显示。</summary>
-        public static MusicScene[] ScenesIn(SceneGroup g)
+        /// <summary>该大类下的全部场景。</summary>
+        internal static MusicScene[] ScenesIn(SceneGroup g)
         {
             switch (g)
             {
                 case SceneGroup.Interface:
                     return new[] { MusicScene.MainMenu, MusicScene.StrategicMap };
+                case SceneGroup.Mission:
+                    return new[] { MusicScene.Nato, MusicScene.WP, MusicScene.Night };
                 case SceneGroup.Result:
                     return new[] { MusicScene.Victory, MusicScene.Defeat };
                 case SceneGroup.Other:
                     return new[] { MusicScene.Unassigned };
                 default:
-                    return new[] { MusicScene.Cruise, MusicScene.Tension, MusicScene.Combat };
+                    return new[] { MusicScene.Nato };
             }
         }
     }
-
     /// <summary>
     /// 一首曲目。
     ///
@@ -196,7 +202,7 @@ namespace SeaPowerDynamicMusic
                 {
                     if (Scenes.Contains(s)) return s;
                 }
-                return MusicScene.Cruise;
+                return MusicScene.Nato;
             }
         }
 
@@ -428,10 +434,8 @@ namespace SeaPowerDynamicMusic
                         if (library.FindByClip(clip) != null) continue;
 
                         var track = new MusicTrack(clip.name, clip, true);
-                        foreach (MusicScene scene in ScenesForClip(clip.name, bundleName))
-                        {
-                            track.Scenes.Add(scene);
-                        }
+                        // 按游戏自带的 _side 归类，不再猜包名
+                        track.Scenes.Add(SceneOfSide(OfficialSideOf(clip, bundleName)));
                         library.AddOfficial(track);
                         added++;
                     }
@@ -635,10 +639,7 @@ namespace SeaPowerDynamicMusic
                     if (library.FindByClip(clip) != null) continue;
 
                     var track = new MusicTrack(clip.name, clip, true);
-                    foreach (MusicScene scene in ScenesForClip(clip.name, clip.name))
-                    {
-                        track.Scenes.Add(scene);
-                    }
+                    track.Scenes.Add(SceneOfSide(OfficialSideOf(clip, clip.name)));
                     library.AddOfficial(track);
                     found++;
                     Plugin.Verbose("从音频源导入官方曲目: " + clip.name);
@@ -682,10 +683,7 @@ namespace SeaPowerDynamicMusic
                 if (library.FindByClip(clip) != null) return;
 
                 var track = new MusicTrack(display, clip, true);
-                foreach (MusicScene scene in ScenesForClip(display, side))
-                {
-                    track.Scenes.Add(scene);
-                }
+                track.Scenes.Add(SceneOfSide(side));
 
                 library.AddOfficial(track);
                 added++;
@@ -697,32 +695,60 @@ namespace SeaPowerDynamicMusic
             }
         }
 
-        /// <summary>由曲目标签或文件名推断它属于哪些场景。</summary>
-        internal static IEnumerable<MusicScene> ScenesForClip(string name, string side)
+        /// <summary>
+        /// 把游戏 MusicClipData._side 的字符串映射到场景。
+        ///
+        /// 这是官方音乐的唯一权威归类依据。
+        /// 之前靠包名猜（nato→巡航、wp→交战、night→紧张）是错的：
+        /// 实测 _side 只有 7 个值，且 night 是独立一方，
+        /// 与阵营无关。战况三态在游戏里根本不存在标记。
+        ///
+        /// 实测取值：mainmenu / strategicmap / nato / wp / night /
+        /// victory / defeat。
+        /// </summary>
+        internal static MusicScene SceneOfSide(string side)
         {
-            string key = ((side ?? "") + " " + (name ?? "")).ToLowerInvariant();
-
-            if (key.Contains("mainmenu")) { yield return MusicScene.MainMenu; yield break; }
-            if (key.Contains("strategicmap")) { yield return MusicScene.StrategicMap; yield break; }
-            if (key.Contains("victory")) { yield return MusicScene.Victory; yield break; }
-            if (key.Contains("defeat")) { yield return MusicScene.Defeat; yield break; }
-
-            // 战役内的包：nato 巡航、wp 交战、night 紧张。
-            //
-            // 每首曲子只归一个场景。之前三个包都同时归入
-            // Cruise / Tension / Combat，导致一首战斗曲在主菜单
-            // 场景也进入候选池，优先级一高就在主界面响起来。
-            // 场景归属与优先级是两件事：优先级只在所属场景内比较。
-            if (key.Contains("wp")) { yield return MusicScene.Combat; yield break; }
-            if (key.Contains("night")) { yield return MusicScene.Tension; yield break; }
-            if (key.Contains("nato") || key.Contains("game"))
+            switch ((side ?? "").Trim().ToLowerInvariant())
             {
-                yield return MusicScene.Cruise;
-                yield break;
+                case "mainmenu": return MusicScene.MainMenu;
+                case "strategicmap": return MusicScene.StrategicMap;
+                case "nato": return MusicScene.Nato;
+                case "wp": return MusicScene.WP;
+                case "night": return MusicScene.Night;
+                case "victory": return MusicScene.Victory;
+                case "defeat": return MusicScene.Defeat;
+                default: return MusicScene.Unassigned;
             }
+        }
 
-            // 认不出来的一律归到巡航，至少还能在平静时播
-            yield return MusicScene.Cruise;
+        /// <summary>
+        /// 取官方曲目的 _side 值。
+        /// AudioClip 本身没有这个信息，优先用曲名兜底
+        /// （实测 _side 与曲名一致：Nato 1 的 _side 就是 nato）。
+        /// </summary>
+        private static string OfficialSideOf(AudioClip clip, string fallback)
+        {
+            string s = clip != null ? clip.name : null;
+            if (string.IsNullOrEmpty(s)) s = fallback;
+            return (s ?? "").Replace(" ", "").ToLowerInvariant();
+        }
+
+        /// <summary>
+        /// 用户自己的音乐按文件夹或曲名归类。
+        /// 认识的关键词与官方一致，避免同一个文件夹两套规则。
+        /// </summary>
+        internal static MusicScene SceneForUserTrack(string text)
+        {
+            string key = (text ?? "").ToLowerInvariant();
+            if (key.Contains("nato") || key.Contains("北约")) return MusicScene.Nato;
+            if (key.Contains("wp") || key.Contains("华约")) return MusicScene.WP;
+            if (key.Contains("night") || key.Contains("夜")) return MusicScene.Night;
+            if (key.Contains("victory") || key.Contains("胜利")) return MusicScene.Victory;
+            if (key.Contains("defeat") || key.Contains("失败")) return MusicScene.Defeat;
+            if (key.Contains("strategic") || key.Contains("战略")) return MusicScene.StrategicMap;
+            if (key.Contains("mainmenu") || key.Contains("主菜单")
+                || key.Contains("menu")) return MusicScene.MainMenu;
+            return MusicScene.Unassigned;
         }
     }
 
