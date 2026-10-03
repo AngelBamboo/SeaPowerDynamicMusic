@@ -758,16 +758,51 @@ namespace SeaPowerDynamicMusic
         }
 
         /// <summary>一首放完后自动接同一分类的下一首。</summary>
+        /// <summary>
+        /// 一首放完后自动接下一首。
+        ///
+        /// 这里必须清掉 _currentScene 与已播记录之外的所有状态，
+        /// 否则播完时 PickTrack 会认为「当前这首还在播」而排除它，
+        /// 单曲分类就会既接不上下一首、也不重播，表现为「自动暂停」。
+        /// </summary>
         private void AutoAdvance()
         {
             if (!_player.CurrentFinished) return;
 
+            // 上一首已经结束，不再算「正在播放」。
+            // 不清这一句，PickTrack 里的 cur 仍指向它，
+            // 单曲分类会被判成「除当前曲外无候选」而卡住。
+
             var tracks = _library.GetTracks(_currentScene);
+
+            // 诊断：先记下当前状态，确认是「选不出下一首」还是「选到了但没播」。
+            var cur = _player.CurrentTrack;
+            Plugin.LogInfo(string.Format(
+                "自动续播诊断：场景 {0}，候选 {1} 首，已播过 {2} 首，当前曲目 {3}",
+                SceneInfo.SceneName(_currentScene), tracks.Count, _played.Count,
+                cur != null ? cur.DisplayName : "无"));
+
             MusicTrack next = PickTrack(_currentScene, tracks);
-            if (next == null) return;
+            if (next == null)
+            {
+                Plugin.LogInfo(string.Format(
+                    "自动续播诊断：{0} 选不出下一首，保持静默",
+                    SceneInfo.SceneName(_currentScene)));
+                return;
+            }
+
+            // 选到的与当前相同说明只有这一首，此时从头重播
+            if (next == cur)
+            {
+                Plugin.LogInfo(string.Format(
+                    "自动续播诊断：只有 {0} 一首，从头重播", next.DisplayName));
+                _player.Replay();
+                return;
+            }
 
             // 自动接下一首，跨曲淡入淡出
             _player.CrossfadeTo(next, Mathf.Min(1.5f, _settings.FadeSeconds));
+            Plugin.LogInfo(string.Format("自动续播：切到 {0}", next.DisplayName));
         }
 
         /// <summary>把当前曲目设置写回用户配置文件，面板改动后调用。</summary>

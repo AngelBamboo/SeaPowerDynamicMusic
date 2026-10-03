@@ -31,6 +31,20 @@ namespace SeaPowerDynamicMusic
             get { return _active != null && _active.isPlaying; }
         }
 
+        /// <summary>
+        /// 把当前曲目从头重播。
+        ///
+        /// 播完且该分类只有这一首时，PickTrack 会返回它自己，
+        /// CrossfadeTo 因为「同一首且正在播」而早退，结果就是自动暂停。
+        /// 这里显式重置进度并重新播放。
+        /// </summary>
+        public void Replay()
+        {
+            if (_currentTrack == null || _active == null) return;
+            _active.time = 0f;
+            _active.Play();
+        }
+
         /// <summary>当前曲目的播放进度，0~1。未播放时为 0。</summary>
         public float Progress
         {

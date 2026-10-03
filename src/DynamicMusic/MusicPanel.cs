@@ -796,7 +796,7 @@ namespace SeaPowerDynamicMusic
                 // 之前这里放的是排查输入用的诊断信息，对玩家没有意义，已换掉。
                 UI.Label(new Rect(_window.x + 12f, y + 20f, _window.width - 372f, 18f),
                     string.Format(
-                        "{0} 开关面板 · 勾选「启用」让曲目参与播放 · 权重决定同档内被抽中的概率，" +
+                        "{0} 开关面板 · 曲名右侧的方框是启用开关 · 权重决定同档内被抽中的概率，" +
                         "为 0 不参与 · 优先数字越大越先播，同档每首播完一轮才降档",
                         ModConfig.PanelKey), false, true);
 

@@ -435,7 +435,7 @@ namespace SeaPowerDynamicMusic
 
                         var track = new MusicTrack(clip.name, clip, true);
                         // 按游戏自带的 _side 归类，不再猜包名
-                        track.Scenes.Add(SceneOfSide(OfficialSideOf(clip, bundleName)));
+                        AddOfficialScenes(track, OfficialSideOf(clip, bundleName));
                         library.AddOfficial(track);
                         added++;
                     }
@@ -639,7 +639,7 @@ namespace SeaPowerDynamicMusic
                     if (library.FindByClip(clip) != null) continue;
 
                     var track = new MusicTrack(clip.name, clip, true);
-                    track.Scenes.Add(SceneOfSide(OfficialSideOf(clip, clip.name)));
+                    AddOfficialScenes(track, OfficialSideOf(clip, clip.name));
                     library.AddOfficial(track);
                     found++;
                     Plugin.Verbose("从音频源导入官方曲目: " + clip.name);
@@ -708,16 +708,47 @@ namespace SeaPowerDynamicMusic
         /// </summary>
         internal static MusicScene SceneOfSide(string side)
         {
-            switch ((side ?? "").Trim().ToLowerInvariant())
+            string key = (side ?? "").Trim().ToLowerInvariant();
+            if (key.Length == 0) return MusicScene.Unassigned;
+
+            // 用包含匹配而非精确匹配。
+            // 曲名去掉空格后是 "wp1"、"nato3" 这种带序号的形态
+            // （实测 _side 为 wp，clip.name 为 "WP 1"），
+            // 精确匹配会让 WP 那 7 首全部落到「未归类」。
+            //
+            // 顺序有意义：strategicmap 要先于其它判断，
+            // mainmenu 含 "menu" 但不含其它关键词，night 与 nato 前缀不同。
+            if (key.Contains("strategicmap")) return MusicScene.StrategicMap;
+            if (key.Contains("mainmenu") || key.Contains("menu")) return MusicScene.MainMenu;
+            if (key.Contains("victory")) return MusicScene.Victory;
+            if (key.Contains("defeat")) return MusicScene.Defeat;
+            if (key.Contains("night")) return MusicScene.Night;
+            if (key.Contains("nato")) return MusicScene.Nato;
+            if (key.Contains("wp")) return MusicScene.WP;
+
+            return MusicScene.Unassigned;
+        }
+
+        /// <summary>
+        /// 官方曲目的场景归属。
+        ///
+        /// nato / wp / night 三组战役音乐同时归入「北约」与「华约」，
+        /// 这样无论玩家操控哪一方都能听到战役音乐，
+        /// 相当于「不受阵营限制」的效果。玩家在面板里可以自行增减归属。
+        ///
+        /// 其余（主菜单、战略地图、胜利、失败）只归各自对应的场景。
+        /// </summary>
+        private static void AddOfficialScenes(MusicTrack track, string side)
+        {
+            MusicScene scene = SceneOfSide(side);
+            track.Scenes.Add(scene);
+
+            if (scene == MusicScene.Nato || scene == MusicScene.WP
+                || scene == MusicScene.Night)
             {
-                case "mainmenu": return MusicScene.MainMenu;
-                case "strategicmap": return MusicScene.StrategicMap;
-                case "nato": return MusicScene.Nato;
-                case "wp": return MusicScene.WP;
-                case "night": return MusicScene.Night;
-                case "victory": return MusicScene.Victory;
-                case "defeat": return MusicScene.Defeat;
-                default: return MusicScene.Unassigned;
+                // 战役音乐不限阵营，两边都能播
+                track.Scenes.Add(MusicScene.Nato);
+                track.Scenes.Add(MusicScene.WP);
             }
         }
 
