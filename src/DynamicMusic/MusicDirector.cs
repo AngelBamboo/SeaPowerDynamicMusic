@@ -22,6 +22,26 @@ namespace SeaPowerDynamicMusic
         /// <summary>由游戏场景信号决定的场景，为空表示处于战役中、交给战况判断。</summary>
         private MusicScene? _sceneOverride;
 
+        /// <summary>
+        /// 是否处于战役内。
+        ///
+        /// 只有战役内才按战况信号在巡航 / 紧张 / 交战之间选曲。
+        /// 主菜单与战略地图固定用自己的音乐。
+        /// 由 OnMusicMode 维护。
+        /// </summary>
+        private bool _inMission;
+
+        /// <summary>
+        /// 是否真的收到过交战 / 紧张信号。
+        ///
+        /// 之前靠 _lastCombatSignal 初值 -999 与 now 相减来间接判断，
+        /// 一旦某处把计时器重置成 Time.unscaledTime 就无法区分
+        /// 「刚收到信号」与「从初始值到现在恰好在阈值内」。
+        /// 显式标志位不再依赖这种巧合。
+        /// </summary>
+        private bool _combatSignalSeen;
+        private bool _tensionSignalSeen;
+
         /// <summary>正在播放的分类。</summary>
         private MusicScene _currentScene;
 
@@ -100,13 +120,16 @@ namespace SeaPowerDynamicMusic
             if (CombatSignals.Contains(key))
             {
                 _lastCombatSignal = Time.unscaledTime;
+                _combatSignalSeen = true;
                 // 开火同时也说明已经接敌
                 _lastTensionSignal = Time.unscaledTime;
+                _tensionSignalSeen = true;
                 Plugin.Verbose("战况信号(交战): " + key);
             }
             else if (TensionSignals.Contains(key))
             {
                 _lastTensionSignal = Time.unscaledTime;
+                _tensionSignalSeen = true;
                 Plugin.Verbose("战况信号(接触): " + key);
             }
         }
@@ -118,33 +141,75 @@ namespace SeaPowerDynamicMusic
             switch (mode)
             {
                 case "MainMenu":
+                    // 离开战役时务必清掉战况标志。
+                    // 否则 _sceneOverride 后续被 Game 模式清空时，
+                    // EvaluateScene 会拿上一场战役的交战状态来判定，
+                    // 于是主菜单里又出现战斗音乐。
+                    _inMission = false;
+                    _combatSignalSeen = false;
+                    _tensionSignalSeen = false;
                     _sceneOverride = MusicScene.MainMenu;
                     break;
                 case "StrategicMap":
+                    _inMission = false;
+                    _combatSignalSeen = false;
+                    _tensionSignalSeen = false;
                     _sceneOverride = MusicScene.StrategicMap;
                     break;
                 case "Credits":
+                    _inMission = false;
+                    _combatSignalSeen = false;
+                    _tensionSignalSeen = false;
                     _sceneOverride = MusicScene.Credits;
                     break;
                 case "Victory":
+                    _inMission = false;
+                    _combatSignalSeen = false;
+                    _tensionSignalSeen = false;
                     _sceneOverride = MusicScene.Victory;
                     // 结算音乐不该被随后的战况信号顶掉
                     _lastCombatSignal = -999f;
                     _lastTensionSignal = -999f;
                     break;
                 case "Defeat":
+                    _inMission = false;
+                    _combatSignalSeen = false;
+                    _tensionSignalSeen = false;
                     _sceneOverride = MusicScene.Defeat;
                     _lastCombatSignal = -999f;
                     _lastTensionSignal = -999f;
                     break;
                 case "NATO":
                 case "WP":
-                case "Game":
-                    // 进入战役内，交出战况判断
+                    // 进入战役内，交出战况判断。
+                    // 清掉上一场战役留下的信号状态，否则刚进新战役
+                    // 就会因为旧时间戳仍在阈值内而直接播战斗曲。
+                    _inMission = true;
                     _sceneOverride = null;
-                    _lastCombatSignal = Time.unscaledTime;
+                    _combatSignalSeen = false;
+                    _tensionSignalSeen = false;
+                    _lastCombatSignal = -999f;
+                    _lastTensionSignal = -999f;
+                    break;
+                case "Game":
+                    // 游戏在主菜单也会周期性设成 Game，与 MainMenu 交替出现。
+                    // 这里绝不能重置 _lastCombatSignal：
+                    // 一旦重置，EvaluateScene 会立刻判定为交战中而切战斗音乐，
+                    // 等 CombatExitDelay 过期后又落回巡航，于是主菜单里
+                    // 每隔十几秒就在战斗曲与巡航曲之间来回跳。
+                    // 保持 _sceneOverride 为空即可，战况计时不受影响。
+                    // 但要标记离开战役：主菜单不该按战况选曲。
+                    _inMission = false;
+                    _combatSignalSeen = false;
+                    _tensionSignalSeen = false;
+                    _sceneOverride = null;
                     break;
                 default:
+                    // 未知模式：保守当作不在战役内。
+                    // 宁可放主菜单音乐，也不要在主菜单里切战斗曲。
+                    _inMission = false;
+                    _combatSignalSeen = false;
+                    _tensionSignalSeen = false;
                     _sceneOverride = null;
                     break;
             }
@@ -222,21 +287,29 @@ namespace SeaPowerDynamicMusic
                 return ResolveWithFallback(_sceneOverride.Value);
             }
 
-            float now = Time.unscaledTime;
-            float sinceCombat = now - _lastCombatSignal;
-            float sinceTension = now - _lastTensionSignal;
-
-            // 进入交战需要一个短暂延迟，避免零星开火就切歌
-            if (sinceCombat < _settings.CombatExitDelay
-                && (now - _lastCombatSignal) > 0f)
+            // 只有真正进入战役（场景为 Cruise / Tension / Combat）才按战况选曲。
+            // 主菜单与战略地图下若也走战况判定，游戏周期性发来的模式信号
+            // 会把场景在两首完全不同的曲子之间来回切。
+            if (!_inMission)
             {
-                if (sinceCombat <= _settings.CombatExitDelay)
-                {
-                    return ResolveWithFallback(MusicScene.Combat);
-                }
+                return ResolveWithFallback(MusicScene.MainMenu);
             }
 
-            if (sinceTension < 60f)
+            float now = Time.unscaledTime;
+
+            // 交战：必须真的收到过交战信号，且距今未超过 CombatExitDelay。
+            // 之前写成 sinceCombat <= CombatExitDelay，
+            // 语义是「离上次交战信号越久越算交战」，正好反了。
+            bool inCombat = _combatSignalSeen
+                && (now - _lastCombatSignal) < _settings.CombatExitDelay;
+            if (inCombat)
+            {
+                return ResolveWithFallback(MusicScene.Combat);
+            }
+
+            // 紧张：收到过紧张信号且未超时。60 秒是「发现敌情」的合理持续时间，
+            // 同样用显式标志位，不靠 -999 初值与 now 的大小关系去凑。
+            if (_tensionSignalSeen && (now - _lastTensionSignal) < 60f)
             {
                 return ResolveWithFallback(MusicScene.Tension);
             }
