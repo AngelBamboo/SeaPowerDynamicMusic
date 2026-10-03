@@ -272,25 +272,34 @@ namespace SeaPowerDynamicMusic
         /// 用点击位置做键：同一位置的重复处理才会被去重，
         /// 不同控件互不影响。
         /// </summary>
-        private static readonly System.Collections.Generic.Dictionary<int, int> _consumed
-            = new System.Collections.Generic.Dictionary<int, int>();
+        /// <summary>
+        /// 每次按下鼠标只允许一个控件响应。
+        ///
+        /// 之前用「位置 -> 帧号」的字典去重，超过 64 项就 Clear()，
+        /// 结果清空后所有历史点击都变成「未消费」，
+        /// 同一帧内后续控件全被判为已点击，
+        /// 表现为「点了某个按钮后所有按钮都被选中」。
+        /// （列表 22 首 × 9 个勾选框，一帧就能破 64）
+        ///
+        /// 改为「一帧只放行一个点击」：用按下边沿判断，
+        /// 第一个调用者拿到 true，之后全部 false。
+        /// 帧号一变立刻自动重置，不需要维护任何集合。
+        /// </summary>
+        private static int _clickFrame = -1;
+        private static bool _clickUsed;
 
-        /// <summary>本次点击是否已被本控件消费过。</summary>
+        /// <summary>本次点击是否已被某个控件消费过。</summary>
         internal static bool ConsumeClick()
         {
             int frame = Time.frameCount;
-            Vector2 p = MouseInput.Position;
+            if (frame != _clickFrame)
+            {
+                _clickFrame = frame;
+                _clickUsed = false;
+            }
 
-            // 量化到 2 像素，浮点抖动不会当成不同位置
-            int key = ((int)(p.x / 2f) << 16) ^ (int)(p.y / 2f);
-
-            int last;
-            if (_consumed.TryGetValue(key, out last) && last == frame) return false;
-
-            _consumed[key] = frame;
-
-            // 只保留最近若干条，避免字典无限增长
-            if (_consumed.Count > 64) _consumed.Clear();
+            if (_clickUsed) return false;
+            _clickUsed = true;
             return true;
         }
 

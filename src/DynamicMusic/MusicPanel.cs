@@ -30,9 +30,6 @@ namespace SeaPowerDynamicMusic
         private float _statusUntil;
         private string _filter = "";
 
-        /// <summary>鼠标穿透：开启后点击同时作用于游戏界面。</summary>
-        private static bool _mousePassthrough;
-
         /// <summary>窗口矩形，拖动时改动。</summary>
         private Rect _window = new Rect(50f, 60f, 1340f, 620f);
 
@@ -140,23 +137,13 @@ namespace SeaPowerDynamicMusic
             }
 
             // 穿透开启时不抢输入焦点，鼠标留给游戏
-            // 穿透开启时不抢输入焦点，鼠标留给游戏
-            if (!_mousePassthrough) InputFocusGuard.SetTyping(true);
+            // 面板显示时接管输入焦点，让游戏别抢鼠标
+            InputFocusGuard.SetTyping(true);
 
             GUI.depth = -1000;
             UI.EnsureStyles();
             UI.BeginFrame();
 
-            // 穿透开启时，底部设置条与标题栏仍可交互，
-            // 否则「鼠标穿透」这个开关自己也点不到，无法关闭。
-            MouseInput.PassthroughHoles.Clear();
-            if (_mousePassthrough)
-            {
-                MouseInput.PassthroughHoles.Add(
-                    new Rect(_window.x, _window.y, _window.width, 52f));
-                MouseInput.PassthroughHoles.Add(
-                    new Rect(_window.x, _window.yMax - 52f, _window.width, 52f));
-            }
 
             // 拖动窗口：按住标题栏即可移动
             HandleWindowDrag();
@@ -166,7 +153,6 @@ namespace SeaPowerDynamicMusic
             var player = Plugin.Instance != null ? Plugin.Instance.Player : null;
             var settings = Plugin.Instance != null ? Plugin.Instance.Settings : null;
 
-            _windowBounds = _window;
             UI.Fill(_window, UI.Panel);
             DrawTitleBar();
             DrawStatusBar(player, director, lib);
@@ -178,10 +164,6 @@ namespace SeaPowerDynamicMusic
                 _clickCount++;
             }
 
-            // 在整个屏幕画出鼠标位置十字。
-            // 代码读到的坐标若与真实光标不符，命中判定就必然失败，
-            // 画出来比看数字直观得多。
-            DrawMouseCrosshair();
 
             if (lib == null || director == null || player == null || settings == null)
             {
@@ -209,35 +191,6 @@ namespace SeaPowerDynamicMusic
             DrawFooter(settings, player);
         }
 
-        /// <summary>
-        /// 在代码读到的鼠标位置画十字，并标出窗口矩形范围。
-        /// 用于判断坐标系是否与界面一致。
-        /// </summary>
-        private static void DrawMouseCrosshair()
-        {
-            Vector2 m = MouseInput.GuiPosition;
-            const float arm = 16f;
-            const float th = 2f;
-
-            Color old = GUI.color;
-
-            GUI.color = new Color(1f, 0.35f, 0.35f, 0.95f);
-            UI.Fill(new Rect(m.x - arm, m.y - th * 0.5f, arm * 2f, th), GUI.color);
-            UI.Fill(new Rect(m.x - th * 0.5f, m.y - arm, th, arm * 2f), GUI.color);
-
-            // 窗口边框，方便对比鼠标是否在窗口内
-            GUI.color = new Color(0.35f, 0.95f, 0.5f, 0.8f);
-            var w = _windowBounds;
-            UI.Fill(new Rect(w.x, w.yMax - 2f, w.width, 2f), GUI.color);
-            UI.Fill(new Rect(w.x, w.y, w.width, 2f), GUI.color);
-            UI.Fill(new Rect(w.x, w.y, 2f, w.height), GUI.color);
-            UI.Fill(new Rect(w.xMax - 2f, w.y, 2f, w.height), GUI.color);
-
-            GUI.color = old;
-        }
-
-        /// <summary>供十字标记使用的窗口矩形。</summary>
-        private static Rect _windowBounds;
 
         /// <summary>
         /// 标题栏下方的状态条：当前曲目、场景、播放进度、曲目数量。
@@ -710,17 +663,6 @@ namespace SeaPowerDynamicMusic
             }
             x += 100f;
 
-            // 鼠标穿透：开启后点击会同时作用于游戏界面，方便边看面板边操作
-            var pass = new Rect(x, y, 92f, 20f);
-            if (UI.Checkbox(pass, _mousePassthrough, "鼠标穿透"))
-            {
-                _mousePassthrough = !_mousePassthrough;
-                InputFocusGuard.SetPassthrough(_mousePassthrough);
-                Plugin.LogInfo("鼠标穿透: " + (_mousePassthrough ? "开" : "关"));
-                SetStatus(_mousePassthrough
-                    ? "已开启鼠标穿透：点击会穿过面板作用于游戏"
-                    : "已关闭鼠标穿透：点击只作用于本面板");
-            }
 
             // 右侧按钮组。宽度各不相同，统一用「累加宽度 + 间距」向左排，
             // 之前各处用固定偏移（6/14/20/22）互相打架，导致按钮重叠。
