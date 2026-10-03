@@ -300,16 +300,32 @@ namespace SeaPowerDynamicMusic
         }
 
         /// <summary>
-        /// 鼠标穿透开启时，Contains 恒为 false。
-        /// 面板自绘控件全部走 Contains 判断，穿透打开后它们就收不到点击，
-        /// 点击自然落到游戏界面（旋转地图、拖拽舰船等）。
+        /// 鼠标穿透时需要放行的区域。
+        ///
+        /// 之前直接让 Contains 恒为 false，结果穿透打开后
+        /// 面板上所有控件都点不到，包括「鼠标穿透」自己，
+        /// 用户再也没法把它关掉。
+        ///
+        /// 现在改为：整个面板仍可命中，只有不在放行区内的控件才让给游戏。
+        /// 放行区包含底部设置条（穿透开关所在行）与标题栏。
         /// </summary>
         internal static bool Blocked;
 
+        /// <summary>穿透时仍然可交互的区域（GUI 坐标）。</summary>
+        internal static readonly System.Collections.Generic.List<Rect> PassthroughHoles
+            = new System.Collections.Generic.List<Rect>();
+
         internal static bool Contains(Rect rect)
         {
-            if (Blocked) return false;
-            return rect.Contains(Position);
+            if (rect.Contains(Position)) return true;
+            if (!Blocked) return false;
+
+            // 穿透开启时，放行区内的控件依旧可点
+            for (int i = 0; i < PassthroughHoles.Count; i++)
+            {
+                if (PassthroughHoles[i].Contains(Position)) return true;
+            }
+            return false;
         }
     }
 }

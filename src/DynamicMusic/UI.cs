@@ -18,6 +18,42 @@ namespace SeaPowerDynamicMusic
         private static GUIStyle _label;
         private static GUIStyle _labelBold;
 
+        /// <summary>
+        /// 预生成的样式组合。
+        ///
+        /// 之前每次画一个标签都 new GUIStyle，一个画面几十个标签，
+        /// 就是每帧几十次堆分配，GC 压力明显。
+        /// 这里按 (粗体, 颜色) 组合缓存，绘制时直接取用。
+        /// </summary>
+        private static readonly System.Collections.Generic.Dictionary<int, GUIStyle> _styleCache
+            = new System.Collections.Generic.Dictionary<int, GUIStyle>();
+
+        private static GUIStyle GetStyle(bool bold, int colorIndex)
+        {
+            int key = (bold ? 1 : 0) | (colorIndex << 1);
+            GUIStyle st;
+            if (_styleCache.TryGetValue(key, out st) && st != null) return st;
+
+            st = new GUIStyle(bold ? _labelBold : _label)
+            {
+                alignment = TextAnchor.MiddleLeft,
+                normal = { textColor = ColorOf(colorIndex) }
+            };
+            _styleCache[key] = st;
+            return st;
+        }
+
+        private static Color ColorOf(int index)
+        {
+            switch (index)
+            {
+                case 1: return TextDim;
+                case 2: return TextWarn;
+                case 3: return Accent;
+                default: return Text;
+            }
+        }
+
         internal static readonly Color Panel = new Color(0.07f, 0.09f, 0.11f, 0.97f);
         internal static readonly Color Row = new Color(1f, 1f, 1f, 0.04f);
         internal static readonly Color RowActive = new Color(0.16f, 0.35f, 0.48f, 0.9f);
@@ -54,22 +90,23 @@ namespace SeaPowerDynamicMusic
 
         private static Rect _clipRect;
 
-        /// <summary>限定后续绘制在指定矩形内，防止内容溢出边框。</summary>
+        /// <summary>
+        /// 限定后续绘制在指定矩形内，防止内容溢出边框。
+        ///
+        /// 只做可见性判断，不使用 GUI.BeginGroup。
+        /// BeginGroup 会把整个坐标系平移到组内原点，
+        /// 而自绘代码传的全是绝对坐标，用了它内容会整体画偏甚至跑到屏幕外
+        /// （曾导致曲目列表整个空白）。
+        /// </summary>
         internal static void PushClip(Rect r)
         {
             _clipRect = r;
-            GUI.BeginGroup(r);
-            _clipShift = new Vector2(r.x, r.y);
         }
 
         internal static void PopClip()
         {
-            GUI.EndGroup();
             _clipRect = new Rect(0f, 0f, 0f, 0f);
-            _clipShift = Vector2.zero;
         }
-
-        private static Vector2 _clipShift = Vector2.zero;
 
         private static Texture2D Tex()
         {
@@ -95,14 +132,8 @@ namespace SeaPowerDynamicMusic
         private static bool Visible(Rect r)
         {
             if (_clipRect.width <= 0f || _clipRect.height <= 0f) return true;
-            Rect a = r;
-            if (_clipShift != Vector2.zero)
-            {
-                a.x -= _clipShift.x;
-                a.y -= _clipShift.y;
-            }
-            return a.xMax > _clipRect.x && a.x < _clipRect.xMax
-                && a.yMax > _clipRect.y && a.y < _clipRect.yMax;
+            return r.xMax > _clipRect.x && r.x < _clipRect.xMax
+                && r.yMax > _clipRect.y && r.y < _clipRect.yMax;
         }
 
 
@@ -114,7 +145,6 @@ namespace SeaPowerDynamicMusic
         {
             if (string.IsNullOrEmpty(text)) return text;
 
-            var style = new GUIStyle(_label) { clipping = TextClipping.Clip };
             // 中文按 12 像素宽估，英文按 6.5 像素宽估
             float w = 0f;
             int i = 0;
@@ -131,12 +161,18 @@ namespace SeaPowerDynamicMusic
         internal static void Label(Rect r, string text, bool bold = false, bool dim = false,
                                   bool warn = false, TextAnchor align = TextAnchor.MiddleLeft)
         {
-            var style = new GUIStyle(bold ? _labelBold : _label)
-            {
-                alignment = align,
-                normal = { textColor = warn ? TextWarn : (dim ? TextDim : Text) }
-            };
             if (!Visible(r)) return;
+
+            int ci = warn ? 2 : (dim ? 1 : 0);
+            GUIStyle style = GetStyle(bold, ci);
+
+            // 对齐方式与默认不同才复制一份，避免每帧 new
+            if (style.alignment != align)
+            {
+                var copy = new GUIStyle(style) { alignment = align };
+                GUI.Label(r, text, copy);
+                return;
+            }
             GUI.Label(r, text, style);
         }
 
@@ -281,8 +317,7 @@ namespace SeaPowerDynamicMusic
             else
             {
                 // 文本左对齐，光标画在末尾
-                var style = new GUIStyle(_label) { alignment = TextAnchor.MiddleLeft };
-                GUI.Label(r, value, style);
+                GUI.Label(r, value, GetStyle(false, 0));
 
                 if (_focused && _blink)
                 {

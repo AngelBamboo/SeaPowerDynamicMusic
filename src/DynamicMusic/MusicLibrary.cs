@@ -319,18 +319,29 @@ namespace SeaPowerDynamicMusic
             return null;
         }
 
-        /// <summary>统计官方音乐数量（去重，按 AudioClip 判断）。</summary>
+        private int _officialCount = -1;
+
+        /// <summary>
+        /// 官方音乐数量（按 AudioClip 去重）。
+        ///
+        /// 这个统计要遍历整个曲库，而面板每帧都要显示，
+        /// 所以结果缓存到 RebuildIndex 为止，避免每帧重复计算。
+        /// </summary>
         public int OfficialCount
         {
             get
             {
-                int n = 0;
-                var seen = new HashSet<AudioClip>();
-                for (int i = 0; i < _all.Count; i++)
+                if (_officialCount < 0)
                 {
-                    if (_all[i].Official && _all[i].Clip != null && seen.Add(_all[i].Clip)) n++;
+                    int n = 0;
+                    var seen = new HashSet<AudioClip>();
+                    for (int i = 0; i < _all.Count; i++)
+                    {
+                        if (_all[i].Official && _all[i].Clip != null && seen.Add(_all[i].Clip)) n++;
+                    }
+                    _officialCount = n;
                 }
-                return n;
+                return _officialCount;
             }
         }
 
@@ -346,6 +357,8 @@ namespace SeaPowerDynamicMusic
         /// </summary>
         public void RebuildIndex()
         {
+            _officialCount = -1;   // 索引重建后统计需重算
+
             foreach (var kv in _byScene)
             {
                 kv.Value.Clear();

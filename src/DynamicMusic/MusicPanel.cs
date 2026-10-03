@@ -23,6 +23,7 @@ namespace SeaPowerDynamicMusic
         private float _trackScroll;
         private static bool _barDragging;
         private static bool _seekDrag;
+        private static float _seekPreview;
         private SceneGroup _group = SceneGroup.Mission;
         private MusicScene _scene = MusicScene.Cruise;
         private string _status = "";
@@ -146,6 +147,17 @@ namespace SeaPowerDynamicMusic
             UI.EnsureStyles();
             UI.BeginFrame();
 
+            // 穿透开启时，底部设置条与标题栏仍可交互，
+            // 否则「鼠标穿透」这个开关自己也点不到，无法关闭。
+            MouseInput.PassthroughHoles.Clear();
+            if (_mousePassthrough)
+            {
+                MouseInput.PassthroughHoles.Add(
+                    new Rect(_window.x, _window.y, _window.width, 52f));
+                MouseInput.PassthroughHoles.Add(
+                    new Rect(_window.x, _window.yMax - 52f, _window.width, 52f));
+            }
+
             // 拖动窗口：按住标题栏即可移动
             HandleWindowDrag();
 
@@ -241,8 +253,8 @@ namespace SeaPowerDynamicMusic
 
             float x = bar.x + 4f;
 
-            UI.Label(new Rect(x, y, 46f, 24f), "正在播放", false, true);
-            x += 48f;
+            UI.Label(new Rect(x, y, 58f, 24f), "正在播放", false, true);
+            x += 60f;
 
             var cur = player.CurrentTrack;
             string name = cur != null ? cur.DisplayName : "（无）";
@@ -273,31 +285,49 @@ namespace SeaPowerDynamicMusic
 
             if (showProgress)
             {
-                UI.Label(new Rect(x, y, wTime, 24f),
-                    FormatDuration(player.PositionSeconds), false, true);
-                x += wTime;
-
                 float p = player.Progress;
+                float shown = _seekDrag ? _seekPreview * cur.Duration
+                                       : player.PositionSeconds;
+                UI.Label(new Rect(x, y, wTime, 24f),
+                    FormatDuration(shown), false, _seekDrag);
+                x += wTime;
                 var track = new Rect(x, y + 9f, 150f, 6f);
                 UI.Fill(track, new Color(1f, 1f, 1f, 0.15f));
-                UI.Fill(new Rect(track.x, track.y, track.width * p, track.height), UI.Accent);
 
-                // 进度条可点按与拖动跳转
+                // 进度条：拖动时只显示预览位置，音乐继续按原进度播；
+                // 松开左键才真正跳转。这样不会一边拖一边反复改播放位置。
                 var grab = new Rect(track.x - 4f, y + 4f, track.width + 8f, 16f);
-                if (MouseInput.Contains(grab) && MouseInput.Pressed) _seekDrag = true;
-                else if (!MouseInput.Held) _seekDrag = false;
-
-                if (_seekDrag && MouseInput.Held)
+                if (MouseInput.Contains(grab) && MouseInput.Pressed)
                 {
-                    float t = Mathf.Clamp01((MouseInput.Position.x - track.x)
+                    _seekDrag = true;
+                    _seekPreview = Mathf.Clamp01((MouseInput.Position.x - track.x)
                         / Mathf.Max(1f, track.width));
-                    player.Seek(t);
-                    p = t;
-                    UI.Fill(new Rect(track.x, track.y, track.width * p, track.height),
-                        UI.Accent);
-                    UI.Fill(new Rect(track.x + track.width * p - 3f, y + 6f, 6f, 12f),
-                        Color.white);
                 }
+                else if (!MouseInput.Held)
+                {
+                    if (_seekDrag)
+                    {
+                        // 松手才跳转
+                        player.Seek(_seekPreview);
+                        Plugin.LogInfo(string.Format("跳转播放进度到 {0:F0}%",
+                            _seekPreview * 100f));
+                    }
+                    _seekDrag = false;
+                }
+
+                if (_seekDrag)
+                {
+                    // 拖动中把鼠标位置换算成预览
+                    _seekPreview = Mathf.Clamp01((MouseInput.Position.x - track.x)
+                        / Mathf.Max(1f, track.width));
+                    p = _seekPreview;
+                }
+
+                // 拖动中的预览条用更亮的颜色区分
+                UI.Fill(new Rect(track.x, track.y, track.width * p, track.height),
+                    _seekDrag ? new Color(0.6f, 0.9f, 1f, 1f) : UI.Accent);
+                UI.Fill(new Rect(track.x + track.width * p - 3f, y + 6f, 6f, 12f),
+                    _seekDrag ? Color.white : new Color(1f, 1f, 1f, 0.6f));
                 x += wBar;
 
                 UI.Label(new Rect(x, y, wTime, 24f),

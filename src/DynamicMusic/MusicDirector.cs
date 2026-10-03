@@ -329,6 +329,18 @@ namespace SeaPowerDynamicMusic
         }
 
         /// <summary>
+        /// 请求重新选择曲目。
+        ///
+        /// 改「含官方音乐」「随机」这类会影响候选池的设置后调用，
+        /// 否则当前这首会一直播到自然结束，看起来像设置没生效。
+        /// </summary>
+        public void Recheck()
+        {
+            _lastSwitchTime = -999f;
+            _currentScene = MusicScene.Unassigned;
+        }
+
+        /// <summary>
         /// 暂停自定义播放并淡出当前曲目。用于切换到原版模式。
         /// 只停自己这路音频，不动游戏的 MusicManager。
         /// </summary>
@@ -600,8 +612,24 @@ namespace SeaPowerDynamicMusic
 
         public void ApplySettings(MusicSettings s)
         {
+            bool officialChanged = _settings != null
+                && _settings.IncludeOfficial != s.IncludeOfficial;
+            bool shuffleChanged = _settings != null
+                && _settings.Shuffle != s.Shuffle;
+
             _settings = s;
             _player.SetVolume(s.Volume);
+
+            // 「含官方音乐」「随机」改动后要立刻重选，
+            // 否则当前这首还在播，看不出设置是否生效。
+            // 例如关掉「含官方音乐」，若不重选，官方曲会一直播到结束。
+            if (officialChanged || shuffleChanged)
+            {
+                Recheck();
+                Plugin.LogInfo(string.Format(
+                    "设置已更新（含官方音乐 {0}，随机 {1}），重新选择曲目。",
+                    s.IncludeOfficial ? "开" : "关", s.Shuffle ? "开" : "关"));
+            }
         }
     }
 

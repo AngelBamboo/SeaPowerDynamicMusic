@@ -47,7 +47,19 @@ namespace SeaPowerDynamicMusic
             LibraryRoot = ResolveLibraryPath(lib);
 
             PanelEnabled = userConfig.GetBool("Panel", "Enabled", true);
+            // 从 F8 迁到 F7（与反导模组冲突）。
+            // 之前只改 ini 文件没有用，因为模组启动时会重写配置，
+            // 而且这个值会被写回配置文件，下次启动又是 F8。
+            // 这里检测到旧值 F8 就自动升级并立刻写回。
             PanelKey = userConfig.Get("Panel", "Hotkey", "F7");
+            if (PanelKey == "F8")
+            {
+                PanelKey = "F7";
+                userConfig.Set("Panel", "Hotkey", "F7");
+                if (!string.IsNullOrEmpty(UserConfigPath))
+                    userConfig.Save(UserConfigPath);
+                Plugin.LogInfo("检测到旧的快捷键 F8，已自动改为 F7（避免与反导模组冲突）。");
+            }
             // 白名单必须含 F7，否则写成 F7 会被强制改回 F8
             if (PanelKey != "F7" && PanelKey != "F8" && PanelKey != "F9"
                 && PanelKey != "Insert" && PanelKey != "Home")
