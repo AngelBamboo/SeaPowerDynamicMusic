@@ -25,8 +25,9 @@ namespace SeaPowerDynamicMusic
             { "主菜单",        MusicScene.MainMenu },
             { "StrategicMap",  MusicScene.StrategicMap },
             { "战略地图",      MusicScene.StrategicMap },
+            // 字典是 OrdinalIgnoreCase，大小写变体不能再重复登记，
+            // 否则初始化时 Add 同键会抛 ArgumentException，模组直接加载失败。
             { "Nato",          MusicScene.Nato },
-            { "NATO",          MusicScene.Nato },
             { "北约",          MusicScene.Nato },
             { "WP",            MusicScene.WP },
             { "华约",          MusicScene.WP },
@@ -39,10 +40,41 @@ namespace SeaPowerDynamicMusic
             { "失败",          MusicScene.Defeat },
         };
 
+        /// <summary>
+        /// 检查别名表是否有重复键。
+        ///
+        /// 字典用 OrdinalIgnoreCase，大小写变体（nato 与 NATO）会被当成同一个键，
+        /// 初始化时 Add 直接抛 ArgumentException，构造函数失败导致整个模组加载不了，
+        /// 表现是进游戏完全没声音且没有任何模组日志。
+        /// 编译期查不出这类问题，只能自己防。
+        /// </summary>
+        private static void VerifyAliases()
+        {
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var dup = new List<string>();
+            foreach (var pair in FolderAliases)
+            {
+                if (!seen.Add(pair.Key)) dup.Add(pair.Key);
+            }
+
+            if (dup.Count > 0)
+            {
+                // 这里不抛异常，否则又会让模组加载失败。改用日志暴露问题。
+                Plugin.LogError("文件夹别名表存在重复键（后者未生效）: "
+                    + string.Join(", ", dup));
+            }
+        }
+
         private readonly Dictionary<MusicScene, List<MusicTrack>> _byScene
             = new Dictionary<MusicScene, List<MusicTrack>>();
 
         private readonly List<MusicTrack> _all = new List<MusicTrack>();
+
+        /// <summary>静态初始化：别名表在声明处已建好，这里做一次自检。</summary>
+        static MusicLibrary()
+        {
+            VerifyAliases();
+        }
 
         /// <summary>路径到曲目的索引，用于去重。</summary>
         private readonly Dictionary<string, MusicTrack> _byPath
