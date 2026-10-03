@@ -155,10 +155,11 @@ namespace SeaPowerDynamicMusic
                     _sceneOverride = MusicScene.StrategicMap;
                     break;
                 case "Credits":
+                    // 制作名单已从场景枚举里移除，这里按非战役处理即可
                     _inMission = false;
                     _combatSignalSeen = false;
                     _tensionSignalSeen = false;
-                    _sceneOverride = MusicScene.Credits;
+                    _sceneOverride = null;
                     break;
                 case "Victory":
                     _inMission = false;
@@ -277,8 +278,32 @@ namespace SeaPowerDynamicMusic
         {
             MusicTrack cur = _player != null ? _player.CurrentTrack : null;
             if (cur == null || !cur.IsLoaded || cur.Excluded) return false;
-            if (!_settings.IncludeOfficial && cur.Official) return false;
+
+            // 没勾官方音乐时，正在播的官方曲目有两种来源：
+            // 1. 玩家切到原版模式前留下的
+            // 2. OfficialFallback 在该场景无自定义曲目时兜底放的
+            // 第 2 种必须放行，否则 Update 下一帧就判定「不适用当前场景」，
+            // 刚兜底播上的官方曲会被立刻切走，兜底等于无效。
+            if (!_settings.IncludeOfficial && cur.Official)
+            {
+                return UsableCustomCount(scene) == 0 && cur.BelongsTo(scene);
+            }
+
             return cur.BelongsTo(scene);
+        }
+
+        /// <summary>统计某场景下可播的自定义（非官方）曲目数。</summary>
+        private int UsableCustomCount(MusicScene scene)
+        {
+            int n = 0;
+            var list = _library.GetTracks(scene);
+            for (int i = 0; i < list.Count; i++)
+            {
+                MusicTrack t = list[i];
+                if (t.Official) continue;
+                if (t.IsLoaded && !t.Excluded && t.Weight > 0f) n++;
+            }
+            return n;
         }
 
         /// <summary>决定此刻应当播放的分类。</summary>
@@ -343,8 +368,7 @@ namespace SeaPowerDynamicMusic
                         return MusicScene.Cruise;
                     break;
                 case MusicScene.StrategicMap:
-                case MusicScene.Credits:
-                    // 战略地图与制作名单不再降级到巡航。
+                    // 战略地图不再降级到巡航。
                     // 之前会降到巡航，表现为「回到战略地图却在放战斗/巡航音乐」，
                     // 听起来像是场景判定错了。这里保持原场景，
                     // 由 SwitchTo 检测到无候选后不切歌，继续放当前这首。
@@ -358,6 +382,14 @@ namespace SeaPowerDynamicMusic
         }
 
         /// <summary>某分类下实际可播放的曲目数：已加载、未排除、权重大于零。</summary>
+        /// <summary>
+        /// 统计某场景下真正可播的曲目数。
+        ///
+        /// 「可播」指勾了启用、已加载、权重大于 0。
+        /// 这里不区分官方与自定义：IncludeOfficial 关闭时，
+        /// 选曲阶段会跳过官方曲目，但场景是否有内容仍要按实际曲目判断，
+        /// 否则「玩家自己在该场景没放曲子」会误判成空场景而错误降级。
+        /// </summary>
         private int UsableCount(MusicScene scene)
         {
             int n = 0;
@@ -365,11 +397,7 @@ namespace SeaPowerDynamicMusic
             for (int i = 0; i < list.Count; i++)
             {
                 MusicTrack t = list[i];
-                if (t.IsLoaded && !t.Excluded && t.Weight > 0f
-                    && (_settings.IncludeOfficial || !t.Official))
-                {
-                    n++;
-                }
+                if (t.IsLoaded && !t.Excluded && t.Weight > 0f) n++;
             }
             return n;
         }
@@ -536,8 +564,13 @@ namespace SeaPowerDynamicMusic
 
                     if (best == int.MinValue)
                     {
-                        // 连一首可播的都没有，单独放行当前这首，避免静音
-                        if (cur != null && Eligible(cur))
+                        // 连一首自定义的都没有，尝试用官方曲目兜底，
+                        // 否则该场景会完全没声音。
+                        var fb = OfficialFallback(scene, tracks, cur);
+                        if (fb != null) return fb;
+
+                        // 官方也没有时，至少别让当前这首断掉
+                        if (cur != null && Eligible(cur, true))
                         {
                             Plugin.Verbose(string.Format(
                                 "{0} 只有一首可播，循环播放", SceneInfo.SceneName(scene)));
@@ -567,7 +600,15 @@ namespace SeaPowerDynamicMusic
 
             // 这一档没有「除当前曲之外」的候选时，把当前曲加回来，
             // 保证单曲分类能循环播放而不是静音。
-            if (ready.Count == 0 && cur != null && Eligible(cur)
+            if (ready.Count == 0 && !_settings.IncludeOfficial)
+            {
+                // 没勾官方音乐，但该场景没有可用的自定义曲目，
+                // 按用户要求回落到官方音乐，避免静音。
+                var fb = OfficialFallback(scene, tracks, cur);
+                if (fb != null) return fb;
+            }
+
+            if (ready.Count == 0 && cur != null && Eligible(cur, true)
                 && cur.Priority == best)
             {
                 ready.Add(cur);
@@ -588,12 +629,54 @@ namespace SeaPowerDynamicMusic
             return chosen;
         }
 
-        /// <summary>曲目是否具备播放资格。</summary>
-        private bool Eligible(MusicTrack t)
+        /// <summary>
+        /// 曲目是否具备播放资格。
+        ///
+        /// includeOfficial 为 false 时官方曲目不参与常规随机，
+        /// 但会在「该场景没有任何玩家自己的曲子」时被单独放行兜底
+        /// （见 PickTrack 的 fallback 分支）。
+        /// </summary>
+        private bool Eligible(MusicTrack t, bool includeOfficial)
         {
             if (t == null || !t.IsLoaded || t.Excluded || t.Weight <= 0f) return false;
-            if (!_settings.IncludeOfficial && t.Official) return false;
+            if (!includeOfficial && t.Official) return false;
             return true;
+        }
+
+        private bool Eligible(MusicTrack t)
+        {
+            return Eligible(t, _settings.IncludeOfficial);
+        }
+
+        /// <summary>
+        /// 该场景没有任何玩家自己的可播曲目时，用官方曲目兜底。
+        ///
+        /// 用户的要求：没勾官方音乐、但自己在该场景也没放曲子时，
+        /// 应当播对应的默认官方音乐，否则就是一片寂静。
+        /// 只在这种情况下放行，官方曲目不会混进玩家的随机池。
+        /// </summary>
+        private MusicTrack OfficialFallback(MusicScene scene, List<MusicTrack> tracks,
+            MusicTrack current)
+        {
+            var pool = new List<MusicTrack>();
+            for (int i = 0; i < tracks.Count; i++)
+            {
+                MusicTrack t = tracks[i];
+                if (!Eligible(t, true)) continue;
+                if (t == current) continue;
+                pool.Add(t);
+            }
+
+            if (pool.Count == 0)
+            {
+                // 官方也只有当前这首，循环它
+                if (current != null && Eligible(current, true)) return current;
+                return null;
+            }
+
+            Plugin.LogInfo(string.Format(
+                "{0} 没有可用的自定义曲目，改播官方音乐。", SceneInfo.SceneName(scene)));
+            return _settings.Shuffle ? WeightedPick(pool) : pool[0];
         }
 
         /// <summary>本场景中已经播过的曲目。同一优先级内每首只播一次。</summary>

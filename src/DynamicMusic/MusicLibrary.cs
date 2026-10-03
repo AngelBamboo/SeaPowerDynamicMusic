@@ -37,8 +37,6 @@ namespace SeaPowerDynamicMusic
             { "胜利",          MusicScene.Victory },
             { "Defeat",        MusicScene.Defeat },
             { "失败",          MusicScene.Defeat },
-            { "Credits",       MusicScene.Credits },
-            { "制作名单",      MusicScene.Credits },
         };
 
         private readonly Dictionary<MusicScene, List<MusicTrack>> _byScene

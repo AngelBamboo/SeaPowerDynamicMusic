@@ -32,8 +32,6 @@ namespace SeaPowerDynamicMusic
         Victory,
         /// <summary>任务失败结算。</summary>
         Defeat,
-        /// <summary>制作人员名单。</summary>
-        Credits,
         /// <summary>
         /// 未归类。仅用于面板显示：勾了它不会播放，
         /// 但没勾任何分类的曲子会落在这里，不会凭空消失。
@@ -63,7 +61,6 @@ namespace SeaPowerDynamicMusic
             {
                 case MusicScene.MainMenu:
                 case MusicScene.StrategicMap:
-                case MusicScene.Credits:
                     return SceneGroup.Interface;
                 case MusicScene.Victory:
                 case MusicScene.Defeat:
@@ -97,7 +94,6 @@ namespace SeaPowerDynamicMusic
                 case MusicScene.Combat: return "交战";
                 case MusicScene.Victory: return "胜利";
                 case MusicScene.Defeat: return "失败";
-                case MusicScene.Credits: return "制作名单";
                 case MusicScene.Unassigned: return "未归类";
                 default: return s.ToString();
             }
@@ -109,7 +105,7 @@ namespace SeaPowerDynamicMusic
             switch (g)
             {
                 case SceneGroup.Interface:
-                    return new[] { MusicScene.MainMenu, MusicScene.StrategicMap, MusicScene.Credits };
+                    return new[] { MusicScene.MainMenu, MusicScene.StrategicMap };
                 case SceneGroup.Result:
                     return new[] { MusicScene.Victory, MusicScene.Defeat };
                 case SceneGroup.Other:
@@ -644,7 +640,6 @@ namespace SeaPowerDynamicMusic
             if (key.Contains("strategicmap")) { yield return MusicScene.StrategicMap; yield break; }
             if (key.Contains("victory")) { yield return MusicScene.Victory; yield break; }
             if (key.Contains("defeat")) { yield return MusicScene.Defeat; yield break; }
-            if (key.Contains("credit")) { yield return MusicScene.Credits; yield break; }
 
             // 战役内的包：nato 巡航、wp 交战、night 紧张。
             //
