@@ -212,6 +212,13 @@ namespace SeaPowerDynamicMusic
         /// 自绘滑块。返回 true 表示应当按新位置取值。
         /// 调用方用 <see cref="ValueFromDrag"/> 取实际值。
         /// </summary>
+        /// <summary>
+        /// 自绘滑块。返回 true 表示应当按新位置取值。
+        ///
+        /// 必须加 ConsumeClick 去重。之前只判 Pressed 与 Released，
+        /// OnGUI 每帧调多次会重复触发，而且同一次点击会同时被
+        /// 滑块与相邻控件处理，表现为「点底部某处会莫名重复触发音乐」。
+        /// </summary>
         internal static bool Slider(Rect r, float value, float min, float max)
         {
             float t = Mathf.Clamp01((value - min) / Mathf.Max(0.0001f, max - min));
@@ -222,23 +229,30 @@ namespace SeaPowerDynamicMusic
                 new Color(Accent.r, Accent.g, Accent.b, 0.35f));
             Fill(new Rect(r.x + 4f + usable * t - 4f, r.y, 8f, r.height), Accent);
 
-            // 抓住即开始拖动
-            if (!_dragging && MouseInput.Contains(r) && MouseInput.Pressed)
+            // 命中区比绘制区略高，10 像素的滑块太好点中不到
+            var grab = new Rect(r.x - 3f, r.y - 5f, r.width + 6f, r.height + 10f);
+
+            // 抓住即开始拖动，只认按下那一下
+            if (!_dragging && MouseInput.Contains(grab) && MouseInput.Pressed
+                && ConsumeClick())
             {
                 _dragging = true;
                 _dragRect = r;
             }
 
-            bool active = _dragging && _dragRect.width == r.width
-                          && Mathf.Abs(_dragRect.x - r.x) < 0.5f
-                          && Mathf.Abs(_dragRect.y - r.y) < 0.5f;
+            bool active = _dragging && SameRect(_dragRect, r);
 
             if (active && MouseInput.Held) return true;
 
-            // 点击轨道直接跳过去
-            if (!active && MouseInput.Contains(r) && MouseInput.Released) return true;
-
             return false;
+        }
+
+        /// <summary>判断两个矩形是否同一个滑块（按位置与尺寸）。</summary>
+        private static bool SameRect(Rect a, Rect b)
+        {
+            return Mathf.Abs(a.x - b.x) < 0.5f && Mathf.Abs(a.y - b.y) < 0.5f
+                && Mathf.Abs(a.width - b.width) < 0.5f
+                && Mathf.Abs(a.height - b.height) < 0.5f;
         }
 
         /// <summary>从鼠标位置算滑块值。</summary>

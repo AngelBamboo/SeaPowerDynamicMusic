@@ -478,7 +478,7 @@ namespace SeaPowerDynamicMusic
                 if (MouseInput.Contains(listRect) && MouseInput.ScrollDelta != 0f)
                 {
                     _trackScroll = Mathf.Clamp(
-                        _trackScroll - MouseInput.ScrollDelta * 420f, 0f, maxScroll);
+                        _trackScroll - MouseInput.ScrollDelta * 900f, 0f, maxScroll);
                 }
 
                 // 滚动条可拖动

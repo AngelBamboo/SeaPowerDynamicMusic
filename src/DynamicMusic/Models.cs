@@ -664,7 +664,7 @@ namespace SeaPowerDynamicMusic
     /// <summary>全局运行期设置。由配置文件和游戏内界面共同维护。</summary>
     public class MusicSettings
     {
-        public float Volume = 0.2f;
+        public float Volume = 0.1f;
         public float FadeSeconds = 2.0f;
         public bool Shuffle = true;
         public bool ReplaceVanilla = true;
