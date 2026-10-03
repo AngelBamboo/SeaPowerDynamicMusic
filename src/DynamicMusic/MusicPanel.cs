@@ -22,6 +22,8 @@ namespace SeaPowerDynamicMusic
         private bool _visible;
         private float _trackScroll;
         private static bool _barDragging;
+        private static string _diagText;
+        private static float _diagTime = -99f;
         private static bool _seekDrag;
         private static float _seekPreview;
         private SceneGroup _group = SceneGroup.Mission;
@@ -420,9 +422,25 @@ namespace SeaPowerDynamicMusic
             var listRect = new Rect(area.x, listY, area.width - 8f, listH);
             UI.Fill(listRect, new Color(0f, 0f, 0f, 0.15f));
 
-            // 滚动
+            // 滚动。有筛选时按筛选后的数量算，否则滚动条长度会不对
             float rowH = 58f;
-            float contentH = tracks.Count * rowH;
+            int matchCount = 0;
+            if (!string.IsNullOrEmpty(_filter))
+            {
+                for (int i = 0; i < tracks.Count; i++)
+                {
+                    if (tracks[i].DisplayName.IndexOf(_filter,
+                            StringComparison.OrdinalIgnoreCase) >= 0)
+                    {
+                        matchCount++;
+                    }
+                }
+            }
+            else
+            {
+                matchCount = tracks.Count;
+            }
+            float contentH = matchCount * rowH;
             if (contentH > listH)
             {
                 float maxScroll = contentH - listH;
@@ -480,9 +498,12 @@ namespace SeaPowerDynamicMusic
                 {
                     continue;
                 }
+
+                // 行位置必须用筛选后的序号（shown），
+                // 之前用原始索引 i，筛选后行与行之间会留空隙甚至错位。
+                float rowY = listY + shown * rowH - _trackScroll;
                 shown++;
 
-                float rowY = listY + i * rowH - _trackScroll;
                 if (rowY + rowH < listY || rowY > area.yMax) continue;   // 裁掉不可见行
 
                 DrawTrackRow(t, director, player,
@@ -729,23 +750,26 @@ namespace SeaPowerDynamicMusic
             }
             else
             {
-                UI.Label(new Rect(_window.x + 12f, y + 20f, 470f, 18f),
-                    string.Format("快捷键 {0} 开关面板；权重 0 不参与随机，优先级越大越优先",
-                        ModConfig.PanelKey), false, true);
-
-                // 诊断信息：点击一直不生效时，用它确认输入到底进没进来
-                UI.Label(new Rect(_window.x + 470f, y + 20f, _window.width - 482f, 18f),
-                    string.Format("输入 {0} | 鼠标 {1:F0},{2:F0} | 按下 {3} | 边沿 {4} | 松开计数 {5} | Update {6} | 帧 {7}",
+                // 诊断信息每 0.5 秒刷新一次即可。
+                // 这些数字不需要每帧更新，而 string.Format 带多个
+                // 数值格式化在每帧几十次的调用下纯属浪费。
+                float now = Time.unscaledTime;
+                if (now - _diagTime >= 0.5f || _diagText == null)
+                {
+                    _diagTime = now;
+                    _diagText = string.Format(
+                        "输入 {0} | 鼠标 {1:F0},{2:F0} | 按下 {3} | 边沿 {4} | 松开 {5} | {6}",
                         MouseInput.DeviceFound ? MouseInput.Source : "无设备",
                         MouseInput.GuiPosition.x, MouseInput.GuiPosition.y,
                         MouseInput.RawHeld ? "是" : "否",
-                        (MouseInput.RawPressed ? "按下" : "") +
-                        (MouseInput.RawReleased ? "松开" : "") == string.Empty
-                            ? "无" : (MouseInput.RawPressed ? "按下" : "松开"),
+                        MouseInput.RawPressed ? "按下"
+                            : (MouseInput.RawReleased ? "松开" : "无"),
                         _clickCount,
-                        _updateCount > 0 ? "运行中" : "未运行",
-                        Time.frameCount - _lastEdgeFrame),
-                    false, true, !MouseInput.DeviceFound || _updateCount == 0);
+                        _updateCount > 0 ? "Update 正常" : "Update 未运行");
+                }
+
+                UI.Label(new Rect(_window.x + 12f, y + 20f, _window.width - 24f, 18f),
+                    _diagText, false, true, !MouseInput.DeviceFound || _updateCount == 0);
             }
         }
 

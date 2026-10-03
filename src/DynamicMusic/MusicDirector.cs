@@ -359,12 +359,12 @@ namespace SeaPowerDynamicMusic
             _started = true;
             _lastSwitchTime = Time.unscaledTime;
 
-            // 立刻按当前场景起播，不等冷却
-            MusicScene want = _sceneOverride.HasValue
-                ? ResolveWithFallback(_sceneOverride.Value)
-                : MusicScene.Cruise;
-            SwitchTo(want);
-            Plugin.LogInfo("已恢复自定义音乐播放。");
+            // 不要写死 Cruise。之前切回接管时一律跳到巡航，
+            // 若玩家当时在胜利画面或战略地图，听到的音乐会与场景不符。
+            // 交给 Update 去 EvaluateScene 判定真实场景，符合「场景跟随」的预期。
+            _currentScene = MusicScene.Unassigned;
+            Recheck();
+            Plugin.LogInfo("已恢复自定义音乐播放，将按当前场景重新选择曲目。");
         }
 
         /// <summary>直接播放指定曲目（界面里点选试听）。</summary>

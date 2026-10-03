@@ -48,19 +48,18 @@ namespace SeaPowerDynamicMusic
         /// <summary>本帧是否检测到松开。</summary>
         internal static bool RawReleased;
 
-        /// <summary>当前鼠标位置，已换算到 IMGUI 坐标系（左下原点）。</summary>
+        /// <summary>
+        /// 当前鼠标位置（GUI 坐标系）。
+        ///
+        /// 读缓存值，不再每次访问都去问设备。
+        /// 之前这个属性每访问一次就读一次 Input System，
+        /// 而面板每帧要调用几百次（22 首曲目 × 13 个控件 × OnGUI 多轮），
+        /// 一帧下来上千次设备读取，是纯浪费。
+        /// 坐标在 BeginFrame 里已刷新，一帧内本来就不会变。
+        /// </summary>
         internal static Vector2 Position
         {
-            get
-            {
-                Vector2 p = ReadRaw();
-                RawPosition = p;
-                Vector2 g = ToGui(p);
-                // 校准后叠加 Y 偏移，命中判定才与真实光标一致
-                if (YCalibrated) g.y += YOffset;
-                GuiPosition = g;
-                return g;
-            }
+            get { return GuiPosition; }
         }
 
         /// <summary>
@@ -285,9 +284,12 @@ namespace SeaPowerDynamicMusic
             RawPressed = _pressedEdge;
             RawReleased = _releasedEdge;
 
-            // 位置每帧刷新，供 OnGUI 使用
+            // 位置每帧刷新一次，供 OnGUI 内所有命中判定复用
             RawPosition = ReadRaw();
-            GuiPosition = ToGui(RawPosition);
+            Vector2 g = ToGui(RawPosition);
+            // 校准后叠加 Y 偏移，命中判定才与真实光标一致
+            if (YCalibrated) g.y += YOffset;
+            GuiPosition = g;
 
             // 滚轮同样要在这里取值，OnGUI 时读已经清零
             CachedScroll = ReadScroll();
@@ -317,13 +319,17 @@ namespace SeaPowerDynamicMusic
 
         internal static bool Contains(Rect rect)
         {
-            if (rect.Contains(Position)) return true;
+            // 位置只取一次。之前写了两遍 Position，
+            // 而它是属性，每次访问都重新读设备。
+            Vector2 p = GuiPosition;
+
+            if (rect.Contains(p)) return true;
             if (!Blocked) return false;
 
             // 穿透开启时，放行区内的控件依旧可点
             for (int i = 0; i < PassthroughHoles.Count; i++)
             {
-                if (PassthroughHoles[i].Contains(Position)) return true;
+                if (PassthroughHoles[i].Contains(p)) return true;
             }
             return false;
         }

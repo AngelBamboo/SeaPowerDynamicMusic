@@ -28,15 +28,16 @@ namespace SeaPowerDynamicMusic
         private static readonly System.Collections.Generic.Dictionary<int, GUIStyle> _styleCache
             = new System.Collections.Generic.Dictionary<int, GUIStyle>();
 
-        private static GUIStyle GetStyle(bool bold, int colorIndex)
+        private static GUIStyle GetStyle(bool bold, int colorIndex,
+            TextAnchor align = TextAnchor.MiddleLeft)
         {
-            int key = (bold ? 1 : 0) | (colorIndex << 1);
+            int key = (bold ? 1 : 0) | (colorIndex << 1) | ((int)align << 3);
             GUIStyle st;
             if (_styleCache.TryGetValue(key, out st) && st != null) return st;
 
             st = new GUIStyle(bold ? _labelBold : _label)
             {
-                alignment = TextAnchor.MiddleLeft,
+                alignment = align,
                 normal = { textColor = ColorOf(colorIndex) }
             };
             _styleCache[key] = st;
@@ -166,11 +167,11 @@ namespace SeaPowerDynamicMusic
             int ci = warn ? 2 : (dim ? 1 : 0);
             GUIStyle style = GetStyle(bold, ci);
 
-            // 对齐方式与默认不同才复制一份，避免每帧 new
+            // 对齐方式与默认不同才查另一份缓存样式，
+            // 之前这里每次都 new GUIStyle，一帧几十个标签就是几十次堆分配。
             if (style.alignment != align)
             {
-                var copy = new GUIStyle(style) { alignment = align };
-                GUI.Label(r, text, copy);
+                GUI.Label(r, text, GetStyle(bold, ci, align));
                 return;
             }
             GUI.Label(r, text, style);
@@ -191,9 +192,10 @@ namespace SeaPowerDynamicMusic
         /// </summary>
         internal static bool Click(Rect r, string text, bool enabled = true)
         {
-            bool hover = enabled && MouseInput.Contains(r);
+            // Contains 只算一次。之前算两遍（hover 一次、点击判定一次）。
+            bool inside = MouseInput.Contains(r);
+            bool hover = enabled && inside;
 
-            // 悬停时画一圈亮边，鼠标是否被跟踪到一眼就能看出来
             Fill(r, !enabled ? Disabled : (hover ? ButtonHover : Button));
             if (hover)
             {
@@ -204,8 +206,8 @@ namespace SeaPowerDynamicMusic
 
             if (!enabled) return false;
 
-            // 只认「按下」并按帧去重，否则一次点击会被处理多次
-            return MouseInput.Contains(r) && MouseInput.Pressed && ConsumeClick();
+            // 只认「按下」并去重，否则一次点击会被 OnGUI 多次调用重复处理
+            return inside && MouseInput.Pressed && ConsumeClick();
         }
 
         /// <summary>
@@ -240,9 +242,11 @@ namespace SeaPowerDynamicMusic
                 _dragRect = r;
             }
 
-            bool active = _dragging && SameRect(_dragRect, r);
-
-            if (active && MouseInput.Held) return true;
+            // 关键：只认「正在拖动的那个矩形」。
+            // 之前用宽度相同来判断同一滑块，而列表里所有滑块宽度都一样，
+            // 拖动第 1 首的权重会让 22 首的权重一起跟着变。
+            // 必须逐边比较位置与尺寸。
+            if (_dragging && SameRect(_dragRect, r) && MouseInput.Held) return true;
 
             return false;
         }
@@ -273,36 +277,53 @@ namespace SeaPowerDynamicMusic
         /// 不同控件互不影响。
         /// </summary>
         /// <summary>
-        /// 每次按下鼠标只允许一个控件响应。
+        /// 一次点击只允许一个控件响应。
         ///
-        /// 之前用「位置 -> 帧号」的字典去重，超过 64 项就 Clear()，
-        /// 结果清空后所有历史点击都变成「未消费」，
-        /// 同一帧内后续控件全被判为已点击，
-        /// 表现为「点了某个按钮后所有按钮都被选中」。
-        /// （列表 22 首 × 9 个勾选框，一帧就能破 64）
+        /// 两次踩坑的总结：
+        /// 1. 用「位置 -> 帧号」字典去重，超过上限就 Clear()，
+        ///    清空后历史记录全变成「未消费」，后续控件全被判为已点击，
+        ///    表现为「点了某处后所有按钮都被选中」。
+        /// 2. 改成「一帧只放行一个」之后，因为 OnGUI 每帧调用多次，
+        ///    而按钮是「先绘制先判定」，
+        ///    只要某个控件在同一帧更早走到 ConsumeClick 返回 true，
+        ///    后面真正被鼠标指到的控件就拿不到额度，点击直接失效。
         ///
-        /// 改为「一帧只放行一个点击」：用按下边沿判断，
-        /// 第一个调用者拿到 true，之后全部 false。
-        /// 帧号一变立刻自动重置，不需要维护任何集合。
+        /// 现在的规则：同一帧内，只放行「鼠标位置所在」的控件一次。
+        /// 位置取自当帧缓存的坐标，OnGUI 调用多少次都相同，
+        /// 因此一次真实点击只会被鼠标下的那个控件消费，
+        /// 重复调用被同位置去重拦下，别的控件不受影响。
         /// </summary>
-        private static int _clickFrame = -1;
-        private static bool _clickUsed;
+        private static int _consumeFrame = -1;
+        private static float _consumeX, _consumeY;
+        private static bool _consumeUsed;
 
-        /// <summary>本次点击是否已被某个控件消费过。</summary>
+        /// <summary>本次点击是否已被消费。返回 true 表示由本控件处理。</summary>
         internal static bool ConsumeClick()
         {
             int frame = Time.frameCount;
-            if (frame != _clickFrame)
+            Vector2 p = MouseInput.GuiPosition;
+
+            if (frame != _consumeFrame)
             {
-                _clickFrame = frame;
-                _clickUsed = false;
+                // 新的一帧，全部重置
+                _consumeFrame = frame;
+                _consumeUsed = false;
+            }
+            else if (_consumeUsed)
+            {
+                // 同帧已消费过：只有鼠标明显移到别处才允许新的控件接手
+                if (Mathf.Abs(p.x - _consumeX) <= 0.5f
+                    && Mathf.Abs(p.y - _consumeY) <= 0.5f)
+                {
+                    return false;
+                }
             }
 
-            if (_clickUsed) return false;
-            _clickUsed = true;
+            _consumeX = p.x;
+            _consumeY = p.y;
+            _consumeUsed = true;
             return true;
         }
-
         /// <summary>
         /// 自绘文本输入框。返回 true 表示内容有变化。
         ///
