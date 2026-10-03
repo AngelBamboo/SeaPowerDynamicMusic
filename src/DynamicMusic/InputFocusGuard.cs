@@ -80,15 +80,23 @@ namespace SeaPowerDynamicMusic
         internal static void SetPassthrough(bool passthrough)
         {
             _passthrough = passthrough;
+
+            // 只靠 typingActive 放权并不可靠：
+            // 面板每帧 OnGUI 都会再调 SetTyping(true) 抢回焦点，
+            // 勾选框刚点完又被覆盖，表现就是「完全没用」。
+            //
+            // 这里改成：穿透时归还焦点，并且不再由 OnGUI 反复抢回，
+            // 关闭穿透才重新接管。真正的点击屏蔽交给 MouseInput.Contains。
+            // 屏蔽面板自身的命中判定，点击落到游戏界面
+            MouseInput.Blocked = passthrough;
+
             if (passthrough)
             {
-                // 立刻放权，地图等界面马上能响应鼠标
-                SetTyping(false);
+                Release();
             }
             else
             {
-                // 收回焦点，防止误操作游戏
-                if (_holding) SetTyping(false);
+                SetTyping(true);
             }
         }
 

@@ -204,7 +204,7 @@ namespace SeaPowerDynamicMusic
                 // 官方音乐默认参与播放且优先级最高，
                 // 玩家新增的音乐不会盖过它们，除非主动调整。
                 Weight = 1f;
-                Priority = 5;
+                Priority = 3;
             }
         }
 

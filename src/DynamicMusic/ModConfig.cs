@@ -24,7 +24,7 @@ namespace SeaPowerDynamicMusic
         public static MusicSettings Settings = new MusicSettings();
 
         public static bool PanelEnabled = true;
-        public static string PanelKey = "F8";
+        public static string PanelKey = "F7";
         public static bool VerboseLog = false;
         public static bool Enabled = true;
 
@@ -47,11 +47,12 @@ namespace SeaPowerDynamicMusic
             LibraryRoot = ResolveLibraryPath(lib);
 
             PanelEnabled = userConfig.GetBool("Panel", "Enabled", true);
-            PanelKey = userConfig.Get("Panel", "Hotkey", "F8");
-            if (PanelKey != "F8" && PanelKey != "F9" && PanelKey != "F10"
+            PanelKey = userConfig.Get("Panel", "Hotkey", "F7");
+            // 白名单必须含 F7，否则写成 F7 会被强制改回 F8
+            if (PanelKey != "F7" && PanelKey != "F8" && PanelKey != "F9"
                 && PanelKey != "Insert" && PanelKey != "Home")
             {
-                PanelKey = "F8";
+                PanelKey = "F7";
             }
 
             var s = new MusicSettings();

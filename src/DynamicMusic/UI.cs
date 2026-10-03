@@ -52,6 +52,25 @@ namespace SeaPowerDynamicMusic
             _labelBold.fontStyle = FontStyle.Bold;
         }
 
+        private static Rect _clipRect;
+
+        /// <summary>限定后续绘制在指定矩形内，防止内容溢出边框。</summary>
+        internal static void PushClip(Rect r)
+        {
+            _clipRect = r;
+            GUI.BeginGroup(r);
+            _clipShift = new Vector2(r.x, r.y);
+        }
+
+        internal static void PopClip()
+        {
+            GUI.EndGroup();
+            _clipRect = new Rect(0f, 0f, 0f, 0f);
+            _clipShift = Vector2.zero;
+        }
+
+        private static Vector2 _clipShift = Vector2.zero;
+
         private static Texture2D Tex()
         {
             if (_tex == null) EnsureStyles();
@@ -61,10 +80,29 @@ namespace SeaPowerDynamicMusic
         internal static void Fill(Rect r, Color c)
         {
             if (Event.current.type != EventType.Repaint) return;
+            if (!Visible(r)) return;
             Color old = GUI.color;
             GUI.color = c;
             GUI.DrawTexture(r, Tex());
             GUI.color = old;
+        }
+
+        /// <summary>
+        /// 判断矩形是否与裁剪区相交。
+        /// 列表滚动时部分可见的行不该画到边框外面去，
+        /// 之前只跳过完全不可见的行，导致半露的行溢出边框。
+        /// </summary>
+        private static bool Visible(Rect r)
+        {
+            if (_clipRect.width <= 0f || _clipRect.height <= 0f) return true;
+            Rect a = r;
+            if (_clipShift != Vector2.zero)
+            {
+                a.x -= _clipShift.x;
+                a.y -= _clipShift.y;
+            }
+            return a.xMax > _clipRect.x && a.x < _clipRect.xMax
+                && a.yMax > _clipRect.y && a.y < _clipRect.yMax;
         }
 
 
@@ -98,6 +136,7 @@ namespace SeaPowerDynamicMusic
                 alignment = align,
                 normal = { textColor = warn ? TextWarn : (dim ? TextDim : Text) }
             };
+            if (!Visible(r)) return;
             GUI.Label(r, text, style);
         }
 

@@ -299,8 +299,16 @@ namespace SeaPowerDynamicMusic
             get { return _edgeFrame == Time.frameCount; }
         }
 
+        /// <summary>
+        /// 鼠标穿透开启时，Contains 恒为 false。
+        /// 面板自绘控件全部走 Contains 判断，穿透打开后它们就收不到点击，
+        /// 点击自然落到游戏界面（旋转地图、拖拽舰船等）。
+        /// </summary>
+        internal static bool Blocked;
+
         internal static bool Contains(Rect rect)
         {
+            if (Blocked) return false;
             return rect.Contains(Position);
         }
     }

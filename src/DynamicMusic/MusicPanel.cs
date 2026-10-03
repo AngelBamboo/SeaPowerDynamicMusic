@@ -139,8 +139,8 @@ namespace SeaPowerDynamicMusic
             }
 
             // 穿透开启时不抢输入焦点，鼠标留给游戏
+            // 穿透开启时不抢输入焦点，鼠标留给游戏
             if (!_mousePassthrough) InputFocusGuard.SetTyping(true);
-            else InputFocusGuard.SetTyping(false);
 
             GUI.depth = -1000;
             UI.EnsureStyles();
@@ -229,43 +229,60 @@ namespace SeaPowerDynamicMusic
 
         /// <summary>
         /// 标题栏下方的状态条：当前曲目、场景、播放进度、曲目数量。
+        ///
+        /// 曲名宽度按窗口实际剩余空间算，不写死。之前固定 230 像素，
+        /// 窗口加宽后曲名仍被截断。这里用 available 动态分配。
         /// </summary>
         private void DrawStatusBar(MusicPlayer player, MusicDirector director, MusicLibrary lib)
         {
             float y = _window.y + 28f;
-            var r = new Rect(_window.x + 8f, y, _window.width - 16f, 24f);
-            UI.Fill(r, new Color(1f, 1f, 1f, 0.04f));
+            var bar = new Rect(_window.x + 8f, y, _window.width - 16f, 24f);
+            UI.Fill(bar, new Color(1f, 1f, 1f, 0.04f));
 
-            float x = r.x + 4f;
+            float x = bar.x + 4f;
 
-            UI.Label(new Rect(x, y, 46f, 22f), "正在播放", false, true);
+            UI.Label(new Rect(x, y, 46f, 24f), "正在播放", false, true);
             x += 48f;
 
             var cur = player.CurrentTrack;
             string name = cur != null ? cur.DisplayName : "（无）";
             if (cur != null && cur.Official) name = "[官方] " + name;
-            UI.Label(new Rect(x, y, 230f, 24f), UI.Ellipsis(name, 226f), true);
-            x += 234f;
 
-            UI.Label(new Rect(x, y, 30f, 24f), "场景", false, true);
-            x += 32f;
-            UI.Label(new Rect(x, y, 74f, 24f),
+            // 场景标签固定 34，宽 78
+            float wScene = 34f;
+            float wSceneVal = 78f;
+            // 时间标签各 40，进度条 150
+            bool showProgress = cur != null && cur.Duration > 0f;
+            float wTime = showProgress ? 40f : 0f;
+            float wBar = showProgress ? 156f : 0f;
+            // 右侧统计固定 170
+            float wStat = 170f;
+
+            // 曲名拿剩下的全部空间
+            float wName = bar.xMax - wStat - x - wScene - wSceneVal - wTime - wBar - 8f;
+            if (wName < 80f) wName = 80f;
+
+            UI.Label(new Rect(x, y, wName, 24f), UI.Ellipsis(name, wName - 6f), true);
+            x += wName;
+
+            UI.Label(new Rect(x, y, wScene, 24f), "场景", false, true);
+            x += wScene;
+            UI.Label(new Rect(x, y, wSceneVal, 24f),
                 SceneInfo.SceneName(director.CurrentScene));
-            x += 78f;
+            x += wSceneVal;
 
-            // 进度条：当前时间 / 总时长
-            if (cur != null && cur.Duration > 0f)
+            if (showProgress)
             {
-                UI.Label(new Rect(x, y, 40f, 24f),
+                UI.Label(new Rect(x, y, wTime, 24f),
                     FormatDuration(player.PositionSeconds), false, true);
-                x += 40f;
+                x += wTime;
 
                 float p = player.Progress;
                 var track = new Rect(x, y + 9f, 150f, 6f);
                 UI.Fill(track, new Color(1f, 1f, 1f, 0.15f));
                 UI.Fill(new Rect(track.x, track.y, track.width * p, track.height), UI.Accent);
 
-                // 进度条可点击与拖动跳转
+                // 进度条可点按与拖动跳转
                 var grab = new Rect(track.x - 4f, y + 4f, track.width + 8f, 16f);
                 if (MouseInput.Contains(grab) && MouseInput.Pressed) _seekDrag = true;
                 else if (!MouseInput.Held) _seekDrag = false;
@@ -276,15 +293,16 @@ namespace SeaPowerDynamicMusic
                         / Mathf.Max(1f, track.width));
                     player.Seek(t);
                     p = t;
-                    UI.Fill(new Rect(track.x, track.y, track.width * p, track.height), UI.Accent);
+                    UI.Fill(new Rect(track.x, track.y, track.width * p, track.height),
+                        UI.Accent);
                     UI.Fill(new Rect(track.x + track.width * p - 3f, y + 6f, 6f, 12f),
                         Color.white);
                 }
-                x += 156f;
+                x += wBar;
 
-                UI.Label(new Rect(x, y, 40f, 24f),
+                UI.Label(new Rect(x, y, wTime, 24f),
                     FormatDuration(cur.Duration), false, true);
-                x += 42f;
+                x += wTime;
 
                 if (!player.IsPlaying)
                 {
@@ -292,8 +310,7 @@ namespace SeaPowerDynamicMusic
                 }
             }
 
-            // 数量统计靠右
-            UI.Label(new Rect(r.xMax - 170f, y, 166f, 24f),
+            UI.Label(new Rect(bar.xMax - wStat, y, wStat - 4f, 24f),
                 string.Format("用户 {0} 首 / 官方 {1} 首", lib.UserTrackCount, lib.OfficialCount),
                 false, true, false, TextAnchor.MiddleRight);
         }
@@ -431,7 +448,7 @@ namespace SeaPowerDynamicMusic
                 if (MouseInput.Contains(listRect) && MouseInput.ScrollDelta != 0f)
                 {
                     _trackScroll = Mathf.Clamp(
-                        _trackScroll - MouseInput.ScrollDelta * 200f, 0f, maxScroll);
+                        _trackScroll - MouseInput.ScrollDelta * 420f, 0f, maxScroll);
                 }
 
                 // 滚动条可拖动
@@ -468,6 +485,9 @@ namespace SeaPowerDynamicMusic
                 _trackScroll = 0f;
             }
 
+            // 裁剪到列表范围内，防止半露的行画到边框外
+            UI.PushClip(listRect);
+
             int shown = 0;
             for (int i = 0; i < tracks.Count; i++)
             {
@@ -485,6 +505,8 @@ namespace SeaPowerDynamicMusic
                 DrawTrackRow(t, director, player,
                     new Rect(area.x + 2f, rowY, listRect.width - 4f, rowH - 2f));
             }
+
+            UI.PopClip();
 
             if (shown == 0)
             {
@@ -664,6 +686,7 @@ namespace SeaPowerDynamicMusic
             {
                 _mousePassthrough = !_mousePassthrough;
                 InputFocusGuard.SetPassthrough(_mousePassthrough);
+                Plugin.LogInfo("鼠标穿透: " + (_mousePassthrough ? "开" : "关"));
                 SetStatus(_mousePassthrough
                     ? "已开启鼠标穿透：点击会穿过面板作用于游戏"
                     : "已关闭鼠标穿透：点击只作用于本面板");
