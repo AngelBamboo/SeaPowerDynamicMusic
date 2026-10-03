@@ -40,6 +40,17 @@ namespace SeaPowerDynamicMusic
     }
 
     /// <summary>面板一级分组。</summary>
+    /// <summary>战役阵营。用于决定该放哪一方的官方音乐。</summary>
+    public enum AllianceSide
+    {
+        /// <summary>不在战役中，或无法判断。</summary>
+        None,
+        /// <summary>北约。</summary>
+        NATO,
+        /// <summary>华约。</summary>
+        WP
+    }
+
     public enum SceneGroup
     {
         /// <summary>界面音乐：主菜单、战略地图、制作名单。</summary>
@@ -433,6 +444,61 @@ namespace SeaPowerDynamicMusic
                 Plugin.Verbose("收集官方音乐失败: " + e.Message);
             }
             return added;
+        }
+
+        /// <summary>
+        /// 读取游戏 MusicClipData 里自带的阵营与模式信息。
+        ///
+        /// 游戏自己给每首官方音乐标了 _side（阵营 NATO / WP）与 _mode
+        /// （MusicManagerMode 枚举），PlayMusic 就靠这两个字段筛选。
+        /// 直接读比按包名猜可靠得多，之前把 wp 归到交战就是猜错了。
+        ///
+        /// 场景归属（巡航／紧张／交战）不在 _mode 里，
+        /// MusicManagerMode 枚举只有 MainMenu / Game / NATO / WP /
+        /// Victory / Defeat / StrategicMap / Credits，
+        /// 战况三态是游戏在同一批曲库里切换实现的。
+        /// 所以场景归属留给玩家在面板里逐首勾选。
+        /// </summary>
+        internal static void DumpOfficialMetadata()
+        {
+            try
+            {
+                var mm = AccessTools.TypeByName("SeaPower.MusicManager");
+                if (mm == null || mm.BaseType == null) return;
+
+                var inst = AccessTools.Method(mm.BaseType, "get_Instance");
+                if (inst == null) return;
+                object manager = inst.Invoke(null, null);
+                if (manager == null) return;
+
+                var listField = AccessTools.Field(mm, "_allClips");
+                if (listField == null) return;
+
+                var list = listField.GetValue(manager) as System.Collections.IEnumerable;
+                if (list == null) return;
+
+                int n = 0;
+                foreach (object item in list)
+                {
+                    if (item == null) continue;
+                    n++;
+
+                    Type ct = item.GetType();
+                    object name = AccessTools.Field(ct, "_name")?.GetValue(item);
+                    object side = AccessTools.Field(ct, "_side")?.GetValue(item);
+                    object mode = AccessTools.Field(ct, "_mode")?.GetValue(item);
+
+                    Plugin.LogInfo(string.Format(
+                        "官方曲目 {0} | side={1} | mode={2}",
+                        name, side, mode));
+                }
+
+                Plugin.LogInfo(string.Format("官方曲目元数据共 {0} 条", n));
+            }
+            catch (Exception e)
+            {
+                Plugin.Verbose("读取官方曲目元数据失败: " + e.Message);
+            }
         }
 
         /// <summary>判断字典键是不是官方音乐包。</summary>

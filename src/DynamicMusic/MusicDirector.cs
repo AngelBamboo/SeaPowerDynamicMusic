@@ -144,12 +144,14 @@ namespace SeaPowerDynamicMusic
                     // EvaluateScene 会拿上一场战役的交战状态来判定，
                     // 于是主菜单里又出现战斗音乐。
                     _inMission = false;
+                    _side = AllianceSide.None;
                     _combatSignalSeen = false;
                     _tensionSignalSeen = false;
                     _sceneOverride = MusicScene.MainMenu;
                     break;
                 case "StrategicMap":
                     _inMission = false;
+                    _side = AllianceSide.None;
                     _combatSignalSeen = false;
                     _tensionSignalSeen = false;
                     _sceneOverride = MusicScene.StrategicMap;
@@ -184,6 +186,8 @@ namespace SeaPowerDynamicMusic
                     // 清掉上一场战役留下的信号状态，否则刚进新战役
                     // 就会因为旧时间戳仍在阈值内而直接播战斗曲。
                     _inMission = true;
+                    _side = AllianceSideOf(mode);
+                    _dumpedMetadata = false;
                     _sceneOverride = null;
                     _combatSignalSeen = false;
                     _tensionSignalSeen = false;
@@ -240,6 +244,14 @@ namespace SeaPowerDynamicMusic
         private void Update()
         {
             if (!_started || _library == null || _player == null) return;
+
+            // 进战役时打印一次官方曲目的阵营与模式，方便确认归属。
+            // 延后到进战役才读，是因为 _allClips 在主菜单阶段可能还没填满。
+            if (_inMission && !_dumpedMetadata)
+            {
+                _dumpedMetadata = true;
+                OfficialMusic.DumpOfficialMetadata();
+            }
 
             MusicScene want = EvaluateScene();
 
@@ -514,10 +526,23 @@ namespace SeaPowerDynamicMusic
             Plugin.Verbose(string.Format("{0} 候选 {1} 首",
                 SceneInfo.SceneName(scene), tracks.Count));
 
-            // 场景切换时清空「已播过」，新场景从头开始
-            if (_roundScene != scene)
+            // 只在「跨大类」时清空已播记录。
+            //
+            // 平静巡航／发现敌情／交战属于同一个大类（战役），
+            // 它们之间互相切换不应该重置进度：
+            // 高优先级曲目播完后若因为战况变化而重置，
+            // 会又从高优先级重新开始一轮，听起来像一直在重复前几首。
+            //
+            // 真正需要重置的是离开战役、回到界面或进入结算。
+            var group = SceneInfo.GroupOf(scene);
+            if (_roundGroup != group)
             {
-                _roundScene = scene;
+                if (_roundGroup.HasValue)
+                {
+                    Plugin.Verbose(string.Format(
+                        "离开 {0}，重置已播记录", SceneInfo.GroupName(_roundGroup.Value)));
+                }
+                _roundGroup = group;
                 _played.Clear();
             }
 
@@ -682,8 +707,31 @@ namespace SeaPowerDynamicMusic
         /// <summary>本场景中已经播过的曲目。同一优先级内每首只播一次。</summary>
         private readonly HashSet<MusicTrack> _played = new HashSet<MusicTrack>();
 
-        /// <summary>_played 所属的场景，切换场景时清空。</summary>
-        private MusicScene? _roundScene;
+        /// <summary>
+        /// _played 所属的大类（界面／战役／结算／未归类）。
+        /// 同一大类内切换场景不清空，跨大类才重置。
+        /// </summary>
+        private SceneGroup? _roundGroup;
+
+        /// <summary>当前战役使用的阵营。界面场景为 None。</summary>
+        internal AllianceSide _side = AllianceSide.None;
+
+        /// <summary>供面板显示当前阵营。</summary>
+        public AllianceSide Side
+        {
+            get { return _side; }
+        }
+
+        /// <summary>是否已打印过官方曲目元数据，避免反复刷屏。</summary>
+        private bool _dumpedMetadata;
+
+        /// <summary>从游戏模式名判断阵营。</summary>
+        private static AllianceSide AllianceSideOf(string mode)
+        {
+            if (mode == "NATO") return AllianceSide.NATO;
+            if (mode == "WP") return AllianceSide.WP;
+            return AllianceSide.None;
+        }
 
         /// <summary>
         /// 上次尝试切换但失败的目标场景。

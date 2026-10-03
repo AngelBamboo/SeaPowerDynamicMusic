@@ -35,7 +35,7 @@ namespace SeaPowerDynamicMusic.Bridge
         public const string PluginId = "io.github.angelbamboo.dynamicmusic";
 
         public const string DisplayName = "Sea Power Dynamic Music";
-        public const string ModVersion = "0.1.0";
+        public const string ModVersion = "1.0.0";
 
         private const string CoreAssemblyName = "SeaPowerDynamicMusic";
         private const string CoreTypeName = "SeaPowerDynamicMusic.Plugin";

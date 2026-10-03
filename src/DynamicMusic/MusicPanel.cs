@@ -184,7 +184,7 @@ namespace SeaPowerDynamicMusic
             float x = _window.x + 12f;
             DrawGroupColumn(lib, new Rect(x, top, colGroup, height));
             x += colGroup + gap;
-            DrawSceneColumn(lib, new Rect(x, top, colScene, height));
+            DrawSceneColumn(lib, director, new Rect(x, top, colScene, height));
             x += colScene + gap;
             DrawTrackColumn(lib, director, player,
                 new Rect(x, top, _window.xMax - 12f - x, height));
@@ -301,13 +301,17 @@ namespace SeaPowerDynamicMusic
 
         private void DrawTitleBar()
         {
-            var r = new Rect(_window.x + 1f, _window.y + 1f, _window.width - 336f, 26f);
-            UI.Label(r, "动态音乐  Dynamic Music", true, false, false, TextAnchor.MiddleCenter);
+            // 标题在扣除右侧作者区后的区域里居中，
+            // 否则右上角的作者信息会与居中标题重叠。
+            const float authorW = 152f;
+            var r = new Rect(_window.x + 1f, _window.y + 1f,
+                _window.width - authorW - 2f, 26f);
+            UI.Label(r, "动态音乐  Dynamic Music  v" + Plugin.ShortVersion,
+                true, false, false, TextAnchor.MiddleCenter);
 
-            // 右上角作者与项目地址。浅色小字，不抢主标题的视线。
-            UI.Label(new Rect(_window.xMax - 330f, r.y, 322f, r.height),
-                "作者 Angel.Bamboo   github.com/AngelBamboo/SeaPowerDynamicMusic",
-                false, true, false, TextAnchor.MiddleRight);
+            // 右上角只放作者信息，GitHub 地址在右下角
+            UI.Label(new Rect(_window.xMax - authorW, r.y, authorW - 8f, r.height),
+                "作者：Angel.Bamboo", false, true, false, TextAnchor.MiddleRight);
 
             // 供 F9 校准用：标题栏中心就是校准参考点
             MouseInput.TitleBarGuiY = r.center.y;
@@ -371,8 +375,10 @@ namespace SeaPowerDynamicMusic
 
                 if (UI.Click(r, SceneInfo.GroupName(g)))
                 {
+                    // 不自动跳到该大类的第一个场景。
+                    // 「战役音乐」应当直接显示平静巡航、发现敌情、交战
+                    // 三个场景的全部曲目，而不是只显示第一个场景的。
                     _group = g;
-                    _scene = SceneInfo.ScenesIn(g)[0];
                     _trackScroll = 0f;
                 }
 
@@ -386,9 +392,20 @@ namespace SeaPowerDynamicMusic
         // 二级：场景
         // ------------------------------------------------------------------
 
-        private void DrawSceneColumn(MusicLibrary lib, Rect area)
+        private void DrawSceneColumn(MusicLibrary lib, MusicDirector director, Rect area)
         {
             UI.Label(new Rect(area.x, area.y, area.width, 18f), "场景");
+
+            // 战役时显示当前阵营，界面场景显示「无」。
+            // 官方音乐分阵营，玩家在北约作战时不该听到华约的曲子。
+            var side = director.Side;
+            bool inBattle = side != AllianceSide.None;
+            string sideText = inBattle
+                ? ("当前：" + (side == AllianceSide.NATO ? "北约" : "华约"))
+                : "当前：无";
+
+            UI.Label(new Rect(area.x, area.y, area.width - 40f, 18f),
+                sideText, false, !inBattle, false, TextAnchor.MiddleRight);
 
             float y = area.y + 20f;
             foreach (MusicScene s in SceneInfo.ScenesIn(_group))
@@ -416,6 +433,14 @@ namespace SeaPowerDynamicMusic
         private void DrawTrackColumn(MusicLibrary lib, MusicDirector director,
             MusicPlayer player, Rect area)
         {
+            // 切换大类后 _scene 可能仍指向旧大类的场景，
+            // 这里校正到新大类的第一个场景，否则会显示空列表。
+            if (SceneInfo.GroupOf(_scene) != _group)
+            {
+                var pool = SceneInfo.ScenesIn(_group);
+                if (pool.Length > 0) _scene = pool[0];
+            }
+
             var tracks = lib.GetTracks(_scene);
 
             UI.Label(new Rect(area.x, area.y, 200f, 20f),
@@ -769,11 +794,16 @@ namespace SeaPowerDynamicMusic
             {
                 // 底部提示：操作说明 + 作者与项目地址。
                 // 之前这里放的是排查输入用的诊断信息，对玩家没有意义，已换掉。
-                UI.Label(new Rect(_window.x + 12f, y + 20f, _window.width - 24f, 18f),
+                UI.Label(new Rect(_window.x + 12f, y + 20f, _window.width - 372f, 18f),
                     string.Format(
                         "{0} 开关面板 · 勾选「启用」让曲目参与播放 · 权重决定同档内被抽中的概率，" +
                         "为 0 不参与 · 优先数字越大越先播，同档每首播完一轮才降档",
                         ModConfig.PanelKey), false, true);
+
+                // 项目地址放右下角，与底部按钮同一条
+                UI.Label(new Rect(_window.xMax - 360f, y + 20f, 348f, 18f),
+                    "github.com/AngelBamboo/SeaPowerDynamicMusic",
+                    false, true, false, TextAnchor.MiddleRight);
 
             }
         }
