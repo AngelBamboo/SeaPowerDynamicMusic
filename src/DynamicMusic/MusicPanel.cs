@@ -183,11 +183,10 @@ namespace SeaPowerDynamicMusic
             // 上一版误算成 84，中间多出 26 像素空隙
             // （截图里状态条与小标题之间那道明显的空白）。
             //
-            // 底部：提示行画在 y-22（18 高），设置栏在 y（20 高），
-            //       地址行在 y+bh+2（16 高），y = yMax - 46。
-            //       最上沿是 yMax-71，再留 3 像素余量。
+            // 底部：提示行 y-22、设置栏 y、地址行 y+bh+2，y = yMax - 54。
+            //       最上沿是 yMax-79，留 3 像素余量得 82。
             const float TOP_INSET = 58f;
-            const float BOTTOM_INSET = 74f;
+            const float BOTTOM_INSET = 82f;
 
             float top = _window.y + TOP_INSET;
             float bottom = _window.yMax - BOTTOM_INSET;
@@ -776,10 +775,15 @@ namespace SeaPowerDynamicMusic
             var host = Plugin.Instance;
             var lib = host != null ? host.Library : null;
 
-            float y = _window.yMax - 46f;
-            // 灰条要盖住设置行与底部提示行，两行合计约 44 像素，
-            // 原来只有 42，下缘会露出列表内容
-            UI.Fill(new Rect(_window.x + 1f, y - 28f, _window.width - 2f, 74f),
+            float y = _window.yMax - 54f;
+            // 底部三行的实际位置（y = yMax - 54）：
+            //   提示行   y-22 = yMax-76 .. yMax-58
+            //   设置栏   y    = yMax-54 .. yMax-32  (bh 22)
+            //   地址行   y+24 = yMax-30 .. yMax-14
+            // 原来 y = yMax - 46，地址行落到 yMax-6，贴住下缘被切掉一半。
+            //
+            // 灰条要盖住这三行
+            UI.Fill(new Rect(_window.x + 1f, y - 28f, _window.width - 2f, 78f),
                 new Color(1f, 1f, 1f, 0.03f));
 
             float x = _window.x + 12f;
