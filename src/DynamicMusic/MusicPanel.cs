@@ -894,9 +894,16 @@ namespace SeaPowerDynamicMusic
                 SetStatus(Lang.StatusSaved);
             }
 
-            if (!string.IsNullOrEmpty(_status) && Time.realtimeSinceStartup < _statusUntil)
+            // 状态提示画在提示行所在的那一行（y - 22），临时覆盖帮助文字。
+            // 之前画在 y + 20，与 GitHub 地址（y + 24）重叠，
+            // 一点按钮就被地址盖住，看起来像提示行消失了。
+            // 恢复时间到后自动回落到帮助文字。
+            bool showStatus = !string.IsNullOrEmpty(_status)
+                && Time.realtimeSinceStartup < _statusUntil;
+
+            if (showStatus)
             {
-                UI.Label(new Rect(_window.x + 12f, y + 20f, _window.width - 24f, 18f),
+                UI.Label(new Rect(_window.x + 12f, y - 22f, _window.width - 24f, 18f),
                     _status, false, false, true);
             }
             else
