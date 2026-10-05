@@ -173,12 +173,23 @@ namespace SeaPowerDynamicMusic
                 return;
             }
 
-            // 三列的纵向范围：标题栏 26 + 状态条 30 = 56；
-            // 底部设置栏 20 + 提示行 18 + 间隔 6 = 44。
-            // 两个数与 DrawFooter 里实际画的位置对应，
-            // 不然列表会压到设置栏下面或留出空白。
-            const float TOP_INSET = 56f;
-            const float BOTTOM_INSET = 44f;
+            // 三列的纵向范围。数值来自各元素的实际高度，逐项相加：
+            //
+            //   标题栏   27  (y+1 .. y+27)
+            //   状态条   24  (y+28 .. y+52)
+            //   小标题   24  + 与列表的间距 6
+            //   ------------------------------------
+            //   合计     81，取 84 留 3 像素余量
+            //
+            //   底部     提示行 18 + 间距 4 + 设置栏 20 = 42
+            //             提示行在 yMax-68 .. yMax-50
+            //             设置栏在 yMax-46 .. yMax-26
+            //             合计到 yMax-26，取 71 留 3 像素余量
+            //
+            // 之前 TOP_INSET 用 56，状态条到 y+52 只剩 4 像素，
+            // 小标题直接压在状态条上（截图里列表顶部的行被盖住）。
+            const float TOP_INSET = 84f;
+            const float BOTTOM_INSET = 71f;
 
             float top = _window.y + TOP_INSET;
             float bottom = _window.yMax - BOTTOM_INSET;
@@ -317,9 +328,14 @@ namespace SeaPowerDynamicMusic
             // 不画悬停高亮——按钮是常驻指示器，不是动作按钮，
             // 鼠标移上去变色反而像在提示「可以点这里」。
             // 透明底：与标题同色即可，不画按钮背景
+            // 这里不能用 UI.Click：它内部会画 Button 底色与悬停下划线。
+            // 之前只在外面删掉一行 Fill，Click 自己又画回来了，
+            // 所以按钮始终带着一个蓝灰底框。
+            // 语言按钮只需要文字，点击判定自己写。
             var langBtn = new Rect(_window.x + 4f, _window.y + 2f, 74f, 24f);
             UI.Label(langBtn, "简中/ENG", false, true, false, TextAnchor.MiddleCenter);
-            if (UI.Click(langBtn, "简中/ENG"))
+            if (MouseInput.Contains(langBtn) && MouseInput.Pressed
+                && UI.ConsumeClick())
             {
                 Lang.Toggle();
                 ModConfig.Settings.Language = Lang.Current;
@@ -765,7 +781,7 @@ namespace SeaPowerDynamicMusic
             float y = _window.yMax - 46f;
             // 灰条要盖住设置行与底部提示行，两行合计约 44 像素，
             // 原来只有 42，下缘会露出列表内容
-            UI.Fill(new Rect(_window.x + 1f, y - 6f, _window.width - 2f, 48f),
+            UI.Fill(new Rect(_window.x + 1f, y - 28f, _window.width - 2f, 46f),
                 new Color(1f, 1f, 1f, 0.03f));
 
             float x = _window.x + 12f;
@@ -842,7 +858,8 @@ namespace SeaPowerDynamicMusic
             }
 
             // 暂停 / 继续
-            float wPause = 68f;
+            float wPause = EstimateTextWidth(
+                player.IsPlaying ? Lang.BtnPause : Lang.BtnResume) + 26f;
             float xPause = xScan - gap - wPause;
             if (UI.Click(new Rect(xPause, y, wPause, bh),
                     player.IsPlaying ? Lang.BtnPause : Lang.BtnResume))
@@ -853,7 +870,8 @@ namespace SeaPowerDynamicMusic
             }
 
             // 原版模式
-            float wVanilla = settings.VanillaMode ? 96f : 78f;
+            float wVanilla = EstimateTextWidth(
+                settings.VanillaMode ? Lang.BtnExitVanilla : Lang.BtnVanilla) + 26f;
             float xVanilla = xPause - gap - wVanilla;
             if (UI.Click(new Rect(xVanilla, y, wVanilla, bh),
                     settings.VanillaMode ? Lang.BtnExitVanilla : Lang.BtnVanilla))
@@ -883,12 +901,15 @@ namespace SeaPowerDynamicMusic
             {
                 // 底部提示：操作说明 + 作者与项目地址。
                 // 之前这里放的是排查输入用的诊断信息，对玩家没有意义，已换掉。
+                // 提示行放在设置栏「上方」。原先放在 y + 20，
+                // 而 y 已经是 yMax - 46，往下 20 就超出窗口下缘，
+                // 右侧地址被切掉一半。
                 float wHelp = _window.width - 340f;
-                UI.Label(new Rect(_window.x + 12f, y + 20f, wHelp, 18f),
+                UI.Label(new Rect(_window.x + 12f, y - 22f, wHelp, 18f),
                     string.Format(Lang.HelpLine, ModConfig.PanelKey), false, true);
 
                 // 项目地址放右下角，与底部按钮同一条
-                UI.Label(new Rect(_window.xMax - 322f, y + 20f, 310f, 18f),
+                UI.Label(new Rect(_window.xMax - 322f, y - 22f, 310f, 18f),
                     "github.com/AngelBamboo/SeaPowerDynamicMusic",
                     false, true, false, TextAnchor.MiddleRight);
 
