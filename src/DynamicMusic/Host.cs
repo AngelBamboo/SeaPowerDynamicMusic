@@ -147,6 +147,7 @@ namespace SeaPowerDynamicMusic
             float maxWait = 40f;
             float start = Time.realtimeSinceStartup;
             int before = 0;
+            int idleRounds = 0;
 
             while (true)
             {
@@ -167,22 +168,33 @@ namespace SeaPowerDynamicMusic
                             "官方音乐继续载入中 {0} -> {1} 首", before, total));
                     }
                     before = total;
+                    // 有增长就重置静默计数
+                    idleRounds = 0;
+                }
+                else
+                {
+                    idleRounds++;
                 }
 
-                // 以游戏自己声明的官方曲目总数为准。
-                // 之前写死 7（bundle 数），但实际曲目是 22 首，
-                // 达到 7 首就收工，导致大部分官方音乐没被收集。
-                int expected = OfficialMusic.ExpectedTrackCount;
-                if (expected > 0 && before >= expected) break;
+                // 收工条件：连续 8 秒（每秒一轮）没有新曲目进来。
+                //
+                // 不能拿游戏声明的总数当完成条件——它是「此刻」的 _allClips.Count，
+                // 而战斗音乐是异步加载的。启动那一刻只有界面那 4 首，
+                // 拿它当目标会立刻收工，战役音乐一首都收不到。
+                // 也不能写死数字，官方曲目数会随游戏更新变化。
+                //
+                // 「连续多次无增长」不依赖任何外部数字，是最稳的判断。
+                if (before > 0 && idleRounds >= 8) break;
 
                 if (Time.realtimeSinceStartup - start > maxWait)
                 {
-                    // 超时不代表只有这些。游戏可能还在加载资源，
-                    // 继续在后台补齐，玩家不需要手动点重新扫描。
+                    // 超时不代表只有这些，继续在后台收集。
+                    // 同时重置静默计数，给后续加载留出窗口。
                     Plugin.LogWarn(string.Format(
-                        "等了 {0} 秒只收到 {1} 首官方音乐，将继续在后台收集。",
+                        "等了 {0} 秒收到 {1} 首官方音乐，继续在后台收集。",
                         (int)maxWait, before));
                     maxWait += 30f;
+                    idleRounds = 0;
                 }
 
                 yield return new WaitForSecondsRealtime(1f);

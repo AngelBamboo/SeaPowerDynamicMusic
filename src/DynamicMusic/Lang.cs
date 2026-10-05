@@ -102,22 +102,22 @@ namespace SeaPowerDynamicMusic
         internal static string GroupInterface => T("界面音乐", "Interface");
         internal static string GroupMission => T("战役音乐", "Mission");
         internal static string GroupResult => T("结算音乐", "Result");
-        internal static string GroupOther => T("未归类", "Unassigned");
+        internal static string GroupOther => T("未归类", "None");
 
-        internal static string SceneMainMenu => T("主菜单", "Main Menu");
-        internal static string SceneStrategicMap => T("战略地图", "Strategic Map");
+        internal static string SceneMainMenu => T("主菜单", "Menu");
+        internal static string SceneStrategicMap => T("战略地图", "Map");
         internal static string SceneNato => T("北约", "NATO");
         internal static string SceneWP => T("华约", "Warsaw");
         internal static string SceneNight => T("夜间", "Night");
         internal static string SceneVictory => T("胜利", "Victory");
         internal static string SceneDefeat => T("失败", "Defeat");
-        internal static string SceneUnassigned => T("未归类", "Unassigned");
+        internal static string SceneUnassigned => T("未归类", "None");
 
         // ---- 通用 ----
         internal static string ColumnGroup => T("分类", "Category");
         internal static string ColumnScene => T("场景", "Scene");
         internal static string ColumnOwnership => T("归属", "In");
-        internal static string CurrentNone => T("当前：无", "Current: none");
+        internal static string CurrentNone => T("当前：无", "None");
         internal static string CurrentPrefix => T("当前：", "Current: ");
 
         internal static string NowPlaying => T("正在播放", "Playing");
@@ -149,7 +149,7 @@ namespace SeaPowerDynamicMusic
         internal static string NoTracks => T("这个分类下还没有曲目。", "No tracks in this category.");
         internal static string NoMatch => T("没有匹配的曲目。", "No matching tracks.");
 
-        internal static string Author => T("作者：Angel.Bamboo", "By Angel.Bamboo");
+        internal static string Author => T("作者：Angel.Bamboo", "Author: Angel.Bamboo");
         internal static string Title => T("动态音乐", "Dynamic Music");
         internal static string HelpLine => T(
             "{0} 开关面板 · 曲名右侧的方框是启用开关 · 权重决定同档内被抽中的概率，为 0 不参与 · 优先数字越大越先播",

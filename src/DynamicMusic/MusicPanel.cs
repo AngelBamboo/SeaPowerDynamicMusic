@@ -309,8 +309,8 @@ namespace SeaPowerDynamicMusic
             // 左上角语言切换。横排显示，宽度给足。
             // 不画悬停高亮——按钮是常驻指示器，不是动作按钮，
             // 鼠标移上去变色反而像在提示「可以点这里」。
+            // 透明底：与标题同色即可，不画按钮背景
             var langBtn = new Rect(_window.x + 4f, _window.y + 2f, 74f, 24f);
-            UI.Fill(langBtn, UI.Button);
             UI.Label(langBtn, "简中/ENG", false, true, false, TextAnchor.MiddleCenter);
             if (UI.Click(langBtn, "简中/ENG"))
             {
@@ -671,18 +671,35 @@ namespace SeaPowerDynamicMusic
         }
 
         /// <summary>归属分类勾选行。一首曲子可同时属于多个场景。</summary>
+        /// <summary>
+        /// 估算一段文字的像素宽度。
+        /// 中文按 12、ASCII 按 7.2 估，与 UI.Ellipsis 保持一致。
+        /// </summary>
+        private static float EstimateTextWidth(string text)
+        {
+            if (string.IsNullOrEmpty(text)) return 0f;
+            float w = 0f;
+            for (int i = 0; i < text.Length; i++)
+            {
+                w += text[i] > 127 ? 12f : 7.2f;
+            }
+            return w;
+        }
+
         private void DrawSceneToggles(MusicTrack t, Rect r)
         {
-            UI.Label(new Rect(r.x, r.y, 30f, r.height), Lang.ColumnOwnership, false, true);
-
-            float x = r.x + 32f;
+            // 归属行内布局中英文统一：标签与勾选框都按同一份偏移算，
+            // 中文下不再因为标签短而多留空白。
+            float x = r.x;
             const float gap = 4f;
 
             bool changed = false;
             foreach (MusicScene s in Enum.GetValues(typeof(MusicScene)))
             {
-                // 按文字实际长度算宽度，避免中文被截断
-                float w = SceneInfo.SceneName(s).Length * 12f + 22f;
+                // 按文字实际占宽算框宽。
+                // 之前一律按 12 像素/字算，英文标签（"Strategic Map" 14 字符）
+                // 得到的框只有 168 像素，装不下就截断成 "Strategic"。
+                float w = EstimateTextWidth(SceneInfo.SceneName(s)) + 24f;
                 var box = new Rect(x, r.y, w, r.height);
                 if (UI.Checkbox(box, t.Scenes.Contains(s), SceneInfo.SceneName(s)))
                 {
