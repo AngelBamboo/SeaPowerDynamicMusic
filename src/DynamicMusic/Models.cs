@@ -90,11 +90,11 @@ namespace SeaPowerDynamicMusic
         {
             switch (g)
             {
-                case SceneGroup.Interface: return "界面音乐";
-                case SceneGroup.Mission: return "战役音乐";
-                case SceneGroup.Result: return "结算音乐";
-                case SceneGroup.Other: return "未归类";
-                default: return "战役音乐";
+                case SceneGroup.Interface: return Lang.GroupInterface;
+                case SceneGroup.Mission: return Lang.GroupMission;
+                case SceneGroup.Result: return Lang.GroupResult;
+                case SceneGroup.Other: return Lang.GroupOther;
+                default: return Lang.GroupMission;
             }
         }
 
@@ -103,14 +103,14 @@ namespace SeaPowerDynamicMusic
         {
             switch (s)
             {
-                case MusicScene.MainMenu: return "主菜单";
-                case MusicScene.StrategicMap: return "战略地图";
-                case MusicScene.Nato: return "北约";
-                case MusicScene.WP: return "华约";
-                case MusicScene.Night: return "夜间";
-                case MusicScene.Victory: return "胜利";
-                case MusicScene.Defeat: return "失败";
-                case MusicScene.Unassigned: return "未归类";
+                case MusicScene.MainMenu: return Lang.SceneMainMenu;
+                case MusicScene.StrategicMap: return Lang.SceneStrategicMap;
+                case MusicScene.Nato: return Lang.SceneNato;
+                case MusicScene.WP: return Lang.SceneWP;
+                case MusicScene.Night: return Lang.SceneNight;
+                case MusicScene.Victory: return Lang.SceneVictory;
+                case MusicScene.Defeat: return Lang.SceneDefeat;
+                case MusicScene.Unassigned: return Lang.SceneUnassigned;
                 default: return s.ToString();
             }
         }
@@ -829,6 +829,12 @@ namespace SeaPowerDynamicMusic
         public float Volume = 0.1f;
         public float FadeSeconds = 2.0f;
         public bool Shuffle = true;
+
+        /// <summary>界面语言。Auto 表示跟随游戏设置。</summary>
+        public UiLang Language = UiLang.Chinese;
+
+        /// <summary>玩家是否手动指定过语言。没指定过时跟随游戏。</summary>
+        public bool LanguageUserSet;
         public bool ReplaceVanilla = true;
         public float CombatEnterDelay = 3.0f;
         public float CombatExitDelay = 25.0f;

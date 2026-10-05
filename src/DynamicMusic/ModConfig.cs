@@ -55,6 +55,19 @@ namespace SeaPowerDynamicMusic
             if (PanelKey == "F8")
             {
                 PanelKey = "F7";
+
+                // 语言：留空或 Auto 表示跟随游戏
+                string langKey = userConfig.Get("Panel", "Language", "Auto");
+                if (string.IsNullOrEmpty(langKey)
+                    || langKey.Equals("Auto", StringComparison.OrdinalIgnoreCase))
+                {
+                    Settings.LanguageUserSet = false;
+                }
+                else if (Enum.TryParse(langKey, true, out UiLang parsed))
+                {
+                    Settings.Language = parsed;
+                    Settings.LanguageUserSet = true;
+                }
                 userConfig.Set("Panel", "Hotkey", "F7");
                 if (!string.IsNullOrEmpty(UserConfigPath))
                     userConfig.Save(UserConfigPath);
@@ -140,6 +153,9 @@ namespace SeaPowerDynamicMusic
             sb.AppendLine("Enabled=true");
             sb.AppendLine("# 呼出面板的快捷键，可选 F7 / F8 / F9 / Insert / Home");
             sb.AppendLine("Hotkey=F7");
+            sb.AppendLine("# 界面语言。Chinese=简体中文，English=英文。");
+            sb.AppendLine("# 这项留空或写 Auto 时跟随游戏设置：游戏是中文就显示中文，其余显示英文。");
+            sb.AppendLine("Language=");
             sb.AppendLine();
             sb.AppendLine("# 下面按场景归类。某个分类没有曲目时会自动退让到其他分类。");
             sb.AppendLine();
@@ -173,6 +189,10 @@ namespace SeaPowerDynamicMusic
                 ini.Set("General", "VanillaMode", Settings.VanillaMode ? "true" : "false");
                 ini.Set("Panel", "Enabled", PanelEnabled ? "true" : "false");
                 ini.Set("Panel", "Hotkey", PanelKey);
+
+                // 语言：玩家手动切过才写入，没切过保持空值以继续跟随游戏
+                ini.Set("Panel", "Language",
+                    Settings.LanguageUserSet ? Settings.Language.ToString() : "");
 
                 ini.Save(UserConfigPath);
             }

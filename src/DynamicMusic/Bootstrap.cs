@@ -88,7 +88,9 @@ namespace SeaPowerDynamicMusic
 
             ApplyPatches();
             CreateHost();
-            LogInfo(string.Format("{0} v{1} 已加载", Name, Version));
+            // 界面语言：玩家指定过就用指定的，否则跟随游戏设置
+        Lang.Init(ModConfig.Settings.LanguageUserSet, ModConfig.Settings.Language);
+        LogInfo(string.Format("{0} v{1} 已加载", Name, Version));
         }
 
         /// <summary>

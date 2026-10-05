@@ -169,7 +169,7 @@ namespace SeaPowerDynamicMusic
             if (lib == null || director == null || player == null || settings == null)
             {
                 UI.Label(new Rect(_window.x + 14f, _window.y + 44f,
-                    _window.width - 28f, 24f), "插件尚未初始化完成，请稍候…", false, true);
+                    _window.width - 28f, 24f), Lang.NotReady, false, true);
                 return;
             }
 
@@ -212,12 +212,12 @@ namespace SeaPowerDynamicMusic
             // 视觉上叠到右上角的标题栏上。
             bool playing = player.IsPlaying;
             UI.Label(new Rect(x, y, 58f, 24f),
-                playing ? "正在播放" : "已暂停", false, true, !playing);
+                playing ? Lang.NowPlaying : Lang.Paused, false, true, !playing);
             x += 60f;
 
             var cur = player.CurrentTrack;
-            string name = cur != null ? cur.DisplayName : "（无）";
-            if (cur != null && cur.Official) name = "[官方] " + name;
+            string name = cur != null ? cur.DisplayName : Lang.None;
+            if (cur != null && cur.Official) name = Lang.OfficialTag + name;
 
             // 场景标签固定 34，宽 78
             float wScene = 34f;
@@ -236,7 +236,7 @@ namespace SeaPowerDynamicMusic
             UI.Label(new Rect(x, y, wName, 24f), UI.Ellipsis(name, wName - 6f), true);
             x += wName;
 
-            UI.Label(new Rect(x, y, wScene, 24f), "场景", false, true);
+            UI.Label(new Rect(x, y, wScene, 24f), Lang.ColumnScene, false, true);
             x += wScene;
             UI.Label(new Rect(x, y, wSceneVal, 24f),
                 SceneInfo.SceneName(director.CurrentScene));
@@ -268,7 +268,7 @@ namespace SeaPowerDynamicMusic
                     {
                         // 松手才跳转
                         player.Seek(_seekPreview);
-                        Plugin.LogInfo(string.Format("跳转播放进度到 {0:F0}%",
+                        Plugin.LogInfo(string.Format(Lang.SeekTo,
                             _seekPreview * 100f));
                     }
                     _seekDrag = false;
@@ -296,23 +296,41 @@ namespace SeaPowerDynamicMusic
             }
 
             UI.Label(new Rect(bar.xMax - wStat, y, wStat - 4f, 24f),
-                string.Format("用户 {0} 首 / 官方 {1} 首", lib.UserTrackCount, lib.OfficialCount),
+                string.Format(Lang.CountStats, lib.UserTrackCount, lib.OfficialCount),
                 false, true, false, TextAnchor.MiddleRight);
         }
 
         private void DrawTitleBar()
         {
+            // 左上角语言切换。放在标题之前，
+            // 点击范围与标题文字分开，不会误触拖动窗口。
+            var langBtn = new Rect(_window.x + 4f, _window.y + 1f, 52f, 26f);
+            bool inLang = MouseInput.Contains(langBtn);
+            UI.Fill(langBtn, inLang ? UI.ButtonHover : UI.Button);
+            UI.Label(langBtn,
+                Lang.Current == UiLang.Chinese ? "简中/ENG" : "ENG/简中",
+                false, false, false, TextAnchor.MiddleCenter);
+            if (UI.Click(langBtn, Lang.Current == UiLang.Chinese ? "简中/ENG" : "ENG/简中"))
+            {
+                Lang.Toggle();
+                ModConfig.Settings.Language = Lang.Current;
+                ModConfig.Settings.LanguageUserSet = true;
+                ModConfig.SaveUserConfig();
+                SetStatus(Lang.Current == UiLang.Chinese ? Lang.SwitchedToCn : "Switched to English");
+            }
+
             // 标题在扣除右侧作者区后的区域里居中，
             // 否则右上角的作者信息会与居中标题重叠。
             const float authorW = 152f;
-            var r = new Rect(_window.x + 1f, _window.y + 1f,
-                _window.width - authorW - 2f, 26f);
-            UI.Label(r, "动态音乐  Dynamic Music  v" + Plugin.Version,
+            const float langW = 56f;
+            var r = new Rect(_window.x + langW, _window.y + 1f,
+                _window.width - authorW - langW - 2f, 26f);
+            UI.Label(r, Lang.Title + "  Dynamic Music  v" + Plugin.Version,
                 true, false, false, TextAnchor.MiddleCenter);
 
             // 右上角只放作者信息，GitHub 地址在右下角
             UI.Label(new Rect(_window.xMax - authorW, r.y, authorW - 8f, r.height),
-                "作者：Angel.Bamboo", false, true, false, TextAnchor.MiddleRight);
+                Lang.Author, false, true, false, TextAnchor.MiddleRight);
 
             // 供 F9 校准用：标题栏中心就是校准参考点
             MouseInput.TitleBarGuiY = r.center.y;
@@ -322,7 +340,12 @@ namespace SeaPowerDynamicMusic
         {
             var bar = new Rect(_window.x + 1f, _window.y + 1f, _window.width - 2f, 26f);
 
-            if (MouseInput.Pressed && MouseInput.Contains(bar))
+            // 左上角是语言切换按钮，不属于拖动区。
+            // 不排除的话点它会同时拖动窗口，两种操作叠在一起。
+            var langZone = new Rect(_window.x + 4f, _window.y + 1f, 52f, 26f);
+
+            if (MouseInput.Pressed && MouseInput.Contains(bar)
+                && !MouseInput.Contains(langZone))
             {
                 _draggingWindow = true;
                 _dragOffset = MouseInput.Position - new Vector2(_window.x, _window.y);
@@ -351,7 +374,7 @@ namespace SeaPowerDynamicMusic
 
         private void DrawGroupColumn(MusicLibrary lib, Rect area)
         {
-            UI.Label(new Rect(area.x, area.y, area.width, 18f), "分类");
+            UI.Label(new Rect(area.x, area.y, area.width, 18f), Lang.ColumnGroup);
 
             float y = area.y + 20f;
             foreach (SceneGroup g in new[] { SceneGroup.Interface, SceneGroup.Mission,
@@ -395,15 +418,16 @@ namespace SeaPowerDynamicMusic
 
         private void DrawSceneColumn(MusicLibrary lib, MusicDirector director, Rect area)
         {
-            UI.Label(new Rect(area.x, area.y, area.width, 18f), "场景");
+            UI.Label(new Rect(area.x, area.y, area.width, 18f), Lang.ColumnScene);
 
             // 战役时显示当前阵营，界面场景显示「无」。
             // 官方音乐分阵营，玩家在北约作战时不该听到华约的曲子。
             var side = director.Side;
             bool inBattle = side != AllianceSide.None;
             string sideText = inBattle
-                ? ("当前：" + (side == AllianceSide.NATO ? "北约" : "华约"))
-                : "当前：无";
+                ? (Lang.CurrentPrefix
+                    + (side == AllianceSide.NATO ? Lang.SceneNato : Lang.SceneWP))
+                : Lang.CurrentNone;
 
             UI.Label(new Rect(area.x, area.y, area.width - 40f, 18f),
                 sideText, false, !inBattle, false, TextAnchor.MiddleRight);
@@ -445,14 +469,14 @@ namespace SeaPowerDynamicMusic
             var tracks = lib.GetTracks(_scene);
 
             UI.Label(new Rect(area.x, area.y, 200f, 20f),
-                SceneInfo.SceneName(_scene) + "  曲目", true);
+                SceneInfo.SceneName(_scene) + Lang.TracksSuffix, true);
 
             // 筛选框：自绘输入，能真正接收键盘
             var boxW = 190f;
             var box = new Rect(area.xMax - boxW - 58f, area.y, boxW, 20f);
-            if (UI.TextField(box, ref _filter, "筛选曲名")) { }
+            if (UI.TextField(box, ref _filter, Lang.FilterName)) { }
 
-            if (UI.Click(new Rect(area.xMax - 54f, area.y, 54f, 20f), "清空"))
+            if (UI.Click(new Rect(area.xMax - 54f, area.y, 54f, 20f), Lang.Clear))
             {
                 _filter = "";
             }
@@ -555,14 +579,14 @@ namespace SeaPowerDynamicMusic
             if (shown == 0)
             {
                 UI.Label(new Rect(area.x + 8f, listY + 8f, area.width - 16f, 20f),
-                    tracks.Count == 0 ? "这个场景下还没有曲目。" : "没有匹配的曲目。",
+                    tracks.Count == 0 ? Lang.NoTracks : Lang.NoMatch,
                     false, true);
                 if (tracks.Count == 0)
                 {
                     UI.Label(new Rect(area.x + 8f, listY + 30f, area.width - 16f, 20f),
-                        "放音乐：" + ModConfig.LibraryRoot + "\\" + _scene + "\\", false, true);
+                        Lang.DropHint + ModConfig.LibraryRoot + "\\" + _scene + "\\", false, true);
                     UI.Label(new Rect(area.x + 8f, listY + 50f, area.width - 16f, 20f),
-                        "或从别的分类勾选过来。", false, true);
+                        Lang.OrCheck, false, true);
                 }
             }
         }
@@ -577,7 +601,7 @@ namespace SeaPowerDynamicMusic
             float x = r.x + 4f;
 
             // 试听
-            string label = (t.Official ? "[官方] " : "") + t.DisplayName;
+            string label = (t.Official ? Lang.OfficialTag : "") + t.DisplayName;
             if (isCurrent) label = "▶ " + label;
 
             var playBtn = new Rect(x, y, 330f, 22f);
@@ -586,19 +610,19 @@ namespace SeaPowerDynamicMusic
             {
                 if (!t.IsLoaded)
                 {
-                    SetStatus(t.LoadFailed ? "该文件加载失败: " + t.DisplayName
-                                           : "尚未加载完成: " + t.DisplayName);
+                    SetStatus(t.LoadFailed ? Lang.LoadFailed + t.DisplayName
+                                           : Lang.NotLoadedYet + t.DisplayName);
                 }
                 else if (isCurrent)
                 {
                     // 再点当前这首：暂停 / 继续
-                    if (player.IsPlaying) { player.Pause(); SetStatus("已暂停: " + t.DisplayName); }
-                    else { player.UnPause(); SetStatus("继续播放: " + t.DisplayName); }
+                    if (player.IsPlaying) { player.Pause(); SetStatus(Lang.PausePrefix + t.DisplayName); }
+                    else { player.UnPause(); SetStatus(Lang.Playback + t.DisplayName); }
                 }
                 else
                 {
                     director.PlayTrack(t);
-                    SetStatus("试听: " + t.DisplayName);
+                    SetStatus(Lang.Audition + t.DisplayName);
                 }
             }
 
@@ -612,11 +636,11 @@ namespace SeaPowerDynamicMusic
                 // 启用时给一个非零权重，否则调度器认为它不可用
                 t.Weight = on ? Mathf.Max(t.Weight, 0.5f) : 0f;
                 if (on) ClearFailedScene();
-                SetStatus((on ? "已启用 " : "已停用 ") + t.DisplayName);
+                SetStatus((on ? Lang.StatusEnabled : Lang.StatusDisabled) + t.DisplayName);
             }
 
             // 权重
-            UI.Label(new Rect(x + 360f, y, 28f, 22f), "权重", false, true);
+            UI.Label(new Rect(x + 360f, y, 28f, 22f), Lang.Weight, false, true);
             var wSlider = new Rect(x + 388f, y + 6f, 68f, 10f);
             if (UI.Slider(wSlider, t.Weight, 0f, 3f))
             {
@@ -625,7 +649,7 @@ namespace SeaPowerDynamicMusic
             UI.Label(new Rect(x + 460f, y, 30f, 22f), t.Weight.ToString("0.0"), false, true);
 
             // 优先级
-            UI.Label(new Rect(x + 494f, y, 28f, 22f), "优先", false, true);
+            UI.Label(new Rect(x + 494f, y, 28f, 22f), Lang.Priority, false, true);
             var pSlider = new Rect(x + 522f, y + 6f, 58f, 10f);
             if (UI.Slider(pSlider, t.Priority, 0f, 5f))
             {
@@ -639,7 +663,7 @@ namespace SeaPowerDynamicMusic
             else if (t.LoadFailed)
                 UI.Label(new Rect(x + 608f, y, 44f, 22f), "失败", false, false, true);
             else
-                UI.Label(new Rect(x + 608f, y, 44f, 22f), "待载", false, true);
+                UI.Label(new Rect(x + 608f, y, 44f, 22f), Lang.Pending, false, true);
 
             DrawSceneToggles(t, new Rect(r.x + 4f, r.y + 30f, r.width - 8f, 22f));
         }
@@ -647,7 +671,7 @@ namespace SeaPowerDynamicMusic
         /// <summary>归属分类勾选行。一首曲子可同时属于多个场景。</summary>
         private void DrawSceneToggles(MusicTrack t, Rect r)
         {
-            UI.Label(new Rect(r.x, r.y, 30f, r.height), "归属", false, true);
+            UI.Label(new Rect(r.x, r.y, 30f, r.height), Lang.ColumnOwnership, false, true);
 
             float x = r.x + 32f;
             const float gap = 4f;
@@ -691,7 +715,7 @@ namespace SeaPowerDynamicMusic
 
             float x = _window.x + 12f;
 
-            UI.Label(new Rect(x, y, 28f, 20f), "音量", false, true);
+            UI.Label(new Rect(x, y, 28f, 20f), Lang.Volume, false, true);
             var vol = new Rect(x + 30f, y + 6f, 110f, 10f);
             if (UI.Slider(vol, settings.Volume, 0f, 1f))
             {
@@ -702,18 +726,18 @@ namespace SeaPowerDynamicMusic
                 Mathf.RoundToInt(settings.Volume * 100) + "%", false, true);
             x += 186f;
 
-            if (UI.Checkbox(new Rect(x, y, 52f, 20f), settings.Shuffle, "随机"))
+            if (UI.Checkbox(new Rect(x, y, 52f, 20f), settings.Shuffle, Lang.Shuffle))
             {
                 settings.Shuffle = !settings.Shuffle;
                 ModConfig.Settings = settings;
                 ModConfig.SaveUserConfig();
                 if (Plugin.Instance != null && Plugin.Instance.Director != null)
                     Plugin.Instance.Director.ApplySettings(settings);
-                SetStatus("随机播放: " + (settings.Shuffle ? "开" : "关"));
+                SetStatus(Lang.ShuffleStatus + (settings.Shuffle ? "开" : "关"));
             }
             x += 60f;
 
-            if (UI.Checkbox(new Rect(x, y, 92f, 20f), settings.IncludeOfficial, "含官方音乐"))
+            if (UI.Checkbox(new Rect(x, y, 92f, 20f), settings.IncludeOfficial, Lang.IncludeOfficial))
             {
                 settings.IncludeOfficial = !settings.IncludeOfficial;
                 ModConfig.Settings = settings;
@@ -721,8 +745,8 @@ namespace SeaPowerDynamicMusic
                 if (Plugin.Instance != null && Plugin.Instance.Director != null)
                     Plugin.Instance.Director.ApplySettings(settings);
                 SetStatus(settings.IncludeOfficial
-                    ? "官方音乐会参与随机"
-                    : "只播你自己的曲子");
+                    ? Lang.OfficialOn
+                    : Lang.OfficialOff);
             }
             x += 100f;
 
@@ -734,7 +758,7 @@ namespace SeaPowerDynamicMusic
 
             // 关闭
             float wClose = 62f;
-            if (UI.Click(new Rect(_window.xMax - 12f - wClose, y, wClose, bh), "关闭"))
+            if (UI.Click(new Rect(_window.xMax - 12f - wClose, y, wClose, bh), Lang.BtnClose))
             {
                 _visible = false;
                 return;
@@ -743,47 +767,45 @@ namespace SeaPowerDynamicMusic
             // 重新扫描
             float wScan = 88f;
             float xScan = _window.xMax - 12f - wClose - gap - wScan;
-            if (UI.Click(new Rect(xScan, y, wScan, bh), "重新扫描"))
+            if (UI.Click(new Rect(xScan, y, wScan, bh), Lang.BtnScan))
             {
                 SaveAll(lib, settings);
                 ClearFailedScene();
                 if (host != null) host.RequestRescan();
-                SetStatus("开始重新扫描…");
+                SetStatus(Lang.Rescanning);
             }
 
             // 暂停 / 继续
             float wPause = 68f;
             float xPause = xScan - gap - wPause;
             if (UI.Click(new Rect(xPause, y, wPause, bh),
-                    player.IsPlaying ? "暂停" : "继续"))
+                    player.IsPlaying ? Lang.BtnPause : Lang.BtnResume))
             {
                 if (player.IsPlaying) player.Pause();
                 else player.UnPause();
-                SetStatus(player.IsPlaying ? "已继续播放" : "已暂停");
+                SetStatus(player.IsPlaying ? Lang.StatusResumed : Lang.StatusPaused);
             }
 
             // 原版模式
             float wVanilla = settings.VanillaMode ? 96f : 78f;
             float xVanilla = xPause - gap - wVanilla;
             if (UI.Click(new Rect(xVanilla, y, wVanilla, bh),
-                    settings.VanillaMode ? "退出原版" : "原版模式"))
+                    settings.VanillaMode ? Lang.BtnExitVanilla : Lang.BtnVanilla))
             {
                 settings.VanillaMode = !settings.VanillaMode;
                 ModConfig.Settings = settings;
                 if (host != null) host.ApplyPlaybackMode();
                 ModConfig.SaveUserConfig();
-                SetStatus(settings.VanillaMode
-                    ? "已切到原版模式：由游戏按原本逻辑播放官方音乐"
-                    : "已退出原版模式：由本模组接管播放");
+                SetStatus(settings.VanillaMode ? Lang.StatusVanilla : Lang.StatusExitVanilla);
             }
 
             // 保存
             float wSave = 62f;
             float xSave = xVanilla - gap - wSave;
-            if (UI.Click(new Rect(xSave, y, wSave, bh), "保存"))
+            if (UI.Click(new Rect(xSave, y, wSave, bh), Lang.BtnSave))
             {
                 SaveAll(lib, settings);
-                SetStatus("已保存");
+                SetStatus(Lang.StatusSaved);
             }
 
             if (!string.IsNullOrEmpty(_status) && Time.realtimeSinceStartup < _statusUntil)
@@ -796,10 +818,7 @@ namespace SeaPowerDynamicMusic
                 // 底部提示：操作说明 + 作者与项目地址。
                 // 之前这里放的是排查输入用的诊断信息，对玩家没有意义，已换掉。
                 UI.Label(new Rect(_window.x + 12f, y + 20f, _window.width - 372f, 18f),
-                    string.Format(
-                        "{0} 开关面板 · 曲名右侧的方框是启用开关 · 权重决定同档内被抽中的概率，" +
-                        "为 0 不参与 · 优先数字越大越先播，同档每首播完一轮才降档",
-                        ModConfig.PanelKey), false, true);
+                    string.Format(Lang.HelpLine, ModConfig.PanelKey), false, true);
 
                 // 项目地址放右下角，与底部按钮同一条
                 UI.Label(new Rect(_window.xMax - 360f, y + 20f, 348f, 18f),
