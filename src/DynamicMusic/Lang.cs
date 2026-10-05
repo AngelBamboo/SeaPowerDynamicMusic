@@ -152,8 +152,8 @@ namespace SeaPowerDynamicMusic
         internal static string Author => T("作者：Angel.Bamboo", "Author: Angel.Bamboo");
         internal static string Title => T("动态音乐", "Dynamic Music");
         internal static string HelpLine => T(
-            "{0} 开关面板 · 曲名右侧的方框是启用开关 · 权重决定同档内被抽中的概率，为 0 不参与 · 优先数字越大越先播",
-            "{0} toggles panel · box right of the name is the on/off switch · weight is the chance within a tier (0 excludes) · higher priority plays first");
+            "{0} 开关面板 · 曲名右侧方框是启用开关 · 权重为被抽中概率，0 不参与 · 优先数字越大越先播",
+            "{0} toggles panel · box right of name is on/off · weight = chance (0 = off) · higher priority first");
         internal static string Guide => T(
             "本模组仍在持续维护中。",
             "This mod is still actively maintained.");

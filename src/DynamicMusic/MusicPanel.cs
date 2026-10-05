@@ -177,12 +177,11 @@ namespace SeaPowerDynamicMusic
             float bottom = _window.yMax - 52f;
             float height = bottom - top;
 
-            // 列宽随语言调整。英文的分类名明显更长
-            // （"Strategic Map" 14 字符，中文「战略地图」只有 4 个字宽），
-            // 用中文宽度硬套会让文字被挤成竖排。
-            bool en = Lang.Current == UiLang.English;
-            float colGroup = en ? 128f : 112f;
-            float colScene = en ? 168f : 146f;
+            // 左菜单两列取两种语言里较宽的那个，中英文切换时宽度不变。
+            // 之前按语言给不同宽度，一切换整个左侧就跟着跳动。
+            // 取最大值保证两边都装得下，代价是中文下留一点空白。
+            float colGroup = 128f;
+            float colScene = 168f;
             float gap = 8f;
 
             float x = _window.x + 12f;
@@ -240,7 +239,8 @@ namespace SeaPowerDynamicMusic
             UI.Label(new Rect(x, y, wName, 24f), UI.Ellipsis(name, wName - 6f), true);
             x += wName;
 
-            UI.Label(new Rect(x, y, wScene, 24f), Lang.ColumnScene, false, true);
+            UI.Label(new Rect(x, y, Math.Max(wScene, EstimateTextWidth(Lang.ColumnScene) + 4f), 24f),
+                Lang.ColumnScene, false, true);
             x += wScene;
             UI.Label(new Rect(x, y, wSceneVal, 24f),
                 SceneInfo.SceneName(director.CurrentScene));
@@ -478,7 +478,8 @@ namespace SeaPowerDynamicMusic
             var box = new Rect(area.xMax - boxW - 58f, area.y, boxW, 20f);
             if (UI.TextField(box, ref _filter, Lang.FilterName)) { }
 
-            if (UI.Click(new Rect(area.xMax - 54f, area.y, 54f, 20f), Lang.Clear))
+            float wClear = EstimateTextWidth(Lang.Clear) + 24f;
+            if (UI.Click(new Rect(area.xMax - wClear, area.y, wClear, 20f), Lang.Clear))
             {
                 _filter = "";
             }
@@ -642,7 +643,10 @@ namespace SeaPowerDynamicMusic
             }
 
             // 权重
-            UI.Label(new Rect(x + 360f, y, 28f, 22f), Lang.Weight, false, true);
+            // 标签宽度按文字算。之前固定 28 像素，中文「优先」勉强，
+            // 英文 Weight / Prio 装不下就被截断或竖排。
+            float wLabel = EstimateTextWidth(Lang.Weight) + 4f;
+            UI.Label(new Rect(x + 360f, y, wLabel, 22f), Lang.Weight, false, true);
             var wSlider = new Rect(x + 388f, y + 6f, 68f, 10f);
             if (UI.Slider(wSlider, t.Weight, 0f, 3f))
             {
@@ -651,7 +655,7 @@ namespace SeaPowerDynamicMusic
             UI.Label(new Rect(x + 460f, y, 30f, 22f), t.Weight.ToString("0.0"), false, true);
 
             // 优先级
-            UI.Label(new Rect(x + 494f, y, 28f, 22f), Lang.Priority, false, true);
+            UI.Label(new Rect(x + 494f, y, wLabel + 4f, 22f), Lang.Priority, false, true);
             var pSlider = new Rect(x + 522f, y + 6f, 58f, 10f);
             if (UI.Slider(pSlider, t.Priority, 0f, 5f))
             {
@@ -665,7 +669,8 @@ namespace SeaPowerDynamicMusic
             else if (t.LoadFailed)
                 UI.Label(new Rect(x + 608f, y, 44f, 22f), "失败", false, false, true);
             else
-                UI.Label(new Rect(x + 608f, y, 44f, 22f), Lang.Pending, false, true);
+                UI.Label(new Rect(x + 608f, y,
+                    EstimateTextWidth(Lang.Pending) + 4f, 22f), Lang.Pending, false, true);
 
             DrawSceneToggles(t, new Rect(r.x + 4f, r.y + 30f, r.width - 8f, 22f));
         }
@@ -734,18 +739,27 @@ namespace SeaPowerDynamicMusic
 
             float x = _window.x + 12f;
 
-            UI.Label(new Rect(x, y, 28f, 20f), Lang.Volume, false, true);
-            var vol = new Rect(x + 30f, y + 6f, 110f, 10f);
+            // 底部各项宽度按实际文字算，不用硬编码。
+            // 之前「音量」固定 28 像素、「随机」固定 52 像素，
+            // 换成英文 Volume / Shuffle 后装不下就逐字竖排。
+            float wVolume = EstimateTextWidth(Lang.Volume) + 4f;
+            UI.Label(new Rect(x, y, wVolume, 20f), Lang.Volume, false, true);
+            x += wVolume + 2f;
+
+            var vol = new Rect(x, y + 6f, 110f, 10f);
             if (UI.Slider(vol, settings.Volume, 0f, 1f))
             {
                 settings.Volume = UI.ValueFromDrag(vol, 0f, 1f);
                 player.SetVolume(settings.Volume);
             }
-            UI.Label(new Rect(x + 144f, y, 34f, 20f),
-                Mathf.RoundToInt(settings.Volume * 100) + "%", false, true);
-            x += 186f;
+            x += 116f;
 
-            if (UI.Checkbox(new Rect(x, y, 52f, 20f), settings.Shuffle, Lang.Shuffle))
+            UI.Label(new Rect(x, y, 38f, 20f),
+                Mathf.RoundToInt(settings.Volume * 100) + "%", false, true);
+            x += 42f;
+
+            float wShuffle = EstimateTextWidth(Lang.Shuffle) + 24f;
+            if (UI.Checkbox(new Rect(x, y, wShuffle, 20f), settings.Shuffle, Lang.Shuffle))
             {
                 settings.Shuffle = !settings.Shuffle;
                 ModConfig.Settings = settings;
@@ -754,10 +768,9 @@ namespace SeaPowerDynamicMusic
                     Plugin.Instance.Director.ApplySettings(settings);
                 SetStatus(Lang.ShuffleStatus + (settings.Shuffle ? "开" : "关"));
             }
-            x += 60f;
+            x += wShuffle + 6f;
 
-            // 英文 Include official 比中文长，宽度按语言给
-            float wOfficial = Lang.Current == UiLang.English ? 128f : 92f;
+            float wOfficial = EstimateTextWidth(Lang.IncludeOfficial) + 24f;
             if (UI.Checkbox(new Rect(x, y, wOfficial, 20f),
                 settings.IncludeOfficial, Lang.IncludeOfficial))
             {
@@ -770,7 +783,7 @@ namespace SeaPowerDynamicMusic
                     ? Lang.OfficialOn
                     : Lang.OfficialOff);
             }
-            x += 100f;
+            x += wOfficial + 6f;
 
 
             // 右侧按钮组。宽度各不相同，统一用「累加宽度 + 间距」向左排，
@@ -839,11 +852,12 @@ namespace SeaPowerDynamicMusic
             {
                 // 底部提示：操作说明 + 作者与项目地址。
                 // 之前这里放的是排查输入用的诊断信息，对玩家没有意义，已换掉。
-                UI.Label(new Rect(_window.x + 12f, y + 20f, _window.width - 372f, 18f),
+                float wHelp = _window.width - 340f;
+                UI.Label(new Rect(_window.x + 12f, y + 20f, wHelp, 18f),
                     string.Format(Lang.HelpLine, ModConfig.PanelKey), false, true);
 
                 // 项目地址放右下角，与底部按钮同一条
-                UI.Label(new Rect(_window.xMax - 360f, y + 20f, 348f, 18f),
+                UI.Label(new Rect(_window.xMax - 322f, y + 20f, 310f, 18f),
                     "github.com/AngelBamboo/SeaPowerDynamicMusic",
                     false, true, false, TextAnchor.MiddleRight);
 
