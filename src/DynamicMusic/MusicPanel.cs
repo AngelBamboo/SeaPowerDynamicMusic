@@ -800,7 +800,12 @@ namespace SeaPowerDynamicMusic
                 ModConfig.SaveUserConfig();
                 if (Plugin.Instance != null && Plugin.Instance.Director != null)
                     Plugin.Instance.Director.ApplySettings(settings);
-                SetStatus(Lang.ShuffleStatus + (settings.Shuffle ? "开" : "关"));
+                // 关掉时说明此时按列表顺序循环，权重不再起作用，
+                // 否则用户会以为权重滑块失效了。
+                // 打开时只回一句「已开启按权重随机」，不用重复解释。
+                SetStatus(settings.Shuffle
+                    ? Lang.ShuffleOnNotice
+                    : Lang.ShuffleOffNotice);
             }
             x += wShuffle + 6f;
 

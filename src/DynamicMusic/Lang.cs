@@ -167,7 +167,7 @@ namespace SeaPowerDynamicMusic
 
 
         internal static string Volume => T("音量", "Volume");
-        internal static string Shuffle => T("随机", "Shuffle");
+        internal static string Shuffle => T("按权重随机", "Weighted Random");
         internal static string FilterName => T("筛选曲名", "Filter");
         internal static string Clear => T("清空", "Clear");
         internal static string Pending => T("待载", "Pending");
@@ -185,7 +185,12 @@ namespace SeaPowerDynamicMusic
         internal static string Failed => T("失败", "Failed");
 
         internal static string SwitchedToCn => T("已切换为简体中文", "Switched to Simplified Chinese");
-        internal static string ShuffleStatus => T("随机播放: ", "Shuffle: ");
+        internal static string ShuffleOnNotice => T(
+            "已开启按权重随机，同档内按各自权重抽取。",
+            "Weighted random on; each track is drawn by its weight.");
+        internal static string ShuffleOffNotice => T(
+            "已按列表顺序循环播，权重暂时不起作用。",
+            "Now playing in list order; weights are ignored.");
         internal static string YCalibrated => T(
             "Y 轴偏移已校准: {0:F0} 像素（十字已与光标对齐）",
             "Y offset calibrated: {0:F0} px");
