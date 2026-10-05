@@ -173,23 +173,21 @@ namespace SeaPowerDynamicMusic
                 return;
             }
 
-            // 三列的纵向范围。数值来自各元素的实际高度，逐项相加：
+            // 三列的纵向范围。数值来自各元素实际占用的位置：
             //
-            //   标题栏   27  (y+1 .. y+27)
-            //   状态条   24  (y+28 .. y+52)
-            //   小标题   24  + 与列表的间距 6
-            //   ------------------------------------
-            //   合计     81，取 84 留 3 像素余量
+            //   标题栏   DrawTitleBar  画在 y+1 .. y+27
+            //   状态条   DrawStatusBar 画在 y+28，高 24，即到 y+52
+            //   小标题   画在 top，高 18，其下 6 像素才是列表
             //
-            //   底部     提示行 18 + 间距 4 + 设置栏 20 = 42
-            //             提示行在 yMax-68 .. yMax-50
-            //             设置栏在 yMax-46 .. yMax-26
-            //             合计到 yMax-26，取 71 留 3 像素余量
+            // 所以列表起点 = 52 + 6 = 58。
+            // 上一版误算成 84，中间多出 26 像素空隙
+            // （截图里状态条与小标题之间那道明显的空白）。
             //
-            // 之前 TOP_INSET 用 56，状态条到 y+52 只剩 4 像素，
-            // 小标题直接压在状态条上（截图里列表顶部的行被盖住）。
-            const float TOP_INSET = 84f;
-            const float BOTTOM_INSET = 71f;
+            // 底部：提示行画在 y-22（18 高），设置栏在 y（20 高），
+            //       地址行在 y+bh+2（16 高），y = yMax - 46。
+            //       最上沿是 yMax-71，再留 3 像素余量。
+            const float TOP_INSET = 58f;
+            const float BOTTOM_INSET = 74f;
 
             float top = _window.y + TOP_INSET;
             float bottom = _window.yMax - BOTTOM_INSET;
@@ -781,7 +779,7 @@ namespace SeaPowerDynamicMusic
             float y = _window.yMax - 46f;
             // 灰条要盖住设置行与底部提示行，两行合计约 44 像素，
             // 原来只有 42，下缘会露出列表内容
-            UI.Fill(new Rect(_window.x + 1f, y - 28f, _window.width - 2f, 46f),
+            UI.Fill(new Rect(_window.x + 1f, y - 28f, _window.width - 2f, 74f),
                 new Color(1f, 1f, 1f, 0.03f));
 
             float x = _window.x + 12f;
@@ -904,16 +902,17 @@ namespace SeaPowerDynamicMusic
                 // 提示行放在设置栏「上方」。原先放在 y + 20，
                 // 而 y 已经是 yMax - 46，往下 20 就超出窗口下缘，
                 // 右侧地址被切掉一半。
-                float wHelp = _window.width - 340f;
+                float wHelp = _window.width - 24f;
                 UI.Label(new Rect(_window.x + 12f, y - 22f, wHelp, 18f),
                     string.Format(Lang.HelpLine, ModConfig.PanelKey), false, true);
 
-                // 项目地址放右下角，与底部按钮同一条
-                UI.Label(new Rect(_window.xMax - 322f, y - 22f, 310f, 18f),
-                    "github.com/AngelBamboo/SeaPowerDynamicMusic",
-                    false, true, false, TextAnchor.MiddleRight);
-
             }
+
+            // GitHub 地址单独一行，放在按钮下方。
+            // 之前与帮助文字同行（都在 y-22），挤在按钮上方。
+            UI.Label(new Rect(_window.x + 12f, y + bh + 2f, _window.width - 24f, 16f),
+                "github.com/AngelBamboo/SeaPowerDynamicMusic",
+                false, true, false, TextAnchor.MiddleRight);
         }
 
         /// <summary>
