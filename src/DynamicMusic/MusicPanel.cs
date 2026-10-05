@@ -173,20 +173,12 @@ namespace SeaPowerDynamicMusic
                 return;
             }
 
-            // 三列的纵向范围。数值来自各元素实际占用的位置：
-            //
-            //   标题栏   DrawTitleBar  画在 y+1 .. y+27
-            //   状态条   DrawStatusBar 画在 y+28，高 24，即到 y+52
-            //   小标题   画在 top，高 18，其下 6 像素才是列表
-            //
-            // 所以列表起点 = 52 + 6 = 58。
-            // 上一版误算成 84，中间多出 26 像素空隙
-            // （截图里状态条与小标题之间那道明显的空白）。
-            //
-            // 底部：提示行 y-22、设置栏 y、地址行 y+bh+2，y = yMax - 54。
-            //       最上沿是 yMax-79，留 3 像素余量得 82。
-            const float TOP_INSET = 58f;
-            const float BOTTOM_INSET = 82f;
+            // 三列的纵向范围：标题栏 26 + 状态条 30 = 56；
+            // 底部设置栏 20 + 提示行 18 + 间隔 6 = 44。
+            // 两个数与 DrawFooter 里实际画的位置对应，
+            // 不然列表会压到设置栏下面或留出空白。
+            const float TOP_INSET = 56f;
+            const float BOTTOM_INSET = 44f;
 
             float top = _window.y + TOP_INSET;
             float bottom = _window.yMax - BOTTOM_INSET;
@@ -325,10 +317,8 @@ namespace SeaPowerDynamicMusic
             // 不画悬停高亮——按钮是常驻指示器，不是动作按钮，
             // 鼠标移上去变色反而像在提示「可以点这里」。
             // 透明底：与标题同色即可，不画按钮背景
-            // 这里不能用 UI.Click：它内部会画 Button 底色与悬停下划线。
-            // 之前只在外面删掉一行 Fill，Click 自己又画回来了，
-            // 所以按钮始终带着一个蓝灰底框。
-            // 语言按钮只需要文字，点击判定自己写。
+            // 不走 UI.Click：它内部会画 Button 底色与悬停下划线。
+            // 语言按钮只要文字，点击判定自己写。
             var langBtn = new Rect(_window.x + 4f, _window.y + 2f, 74f, 24f);
             UI.Label(langBtn, "简中/ENG", false, true, false, TextAnchor.MiddleCenter);
             if (MouseInput.Contains(langBtn) && MouseInput.Pressed
@@ -775,15 +765,10 @@ namespace SeaPowerDynamicMusic
             var host = Plugin.Instance;
             var lib = host != null ? host.Library : null;
 
-            float y = _window.yMax - 54f;
-            // 底部三行的实际位置（y = yMax - 54）：
-            //   提示行   y-22 = yMax-76 .. yMax-58
-            //   设置栏   y    = yMax-54 .. yMax-32  (bh 22)
-            //   地址行   y+24 = yMax-30 .. yMax-14
-            // 原来 y = yMax - 46，地址行落到 yMax-6，贴住下缘被切掉一半。
-            //
-            // 灰条要盖住这三行
-            UI.Fill(new Rect(_window.x + 1f, y - 28f, _window.width - 2f, 78f),
+            float y = _window.yMax - 46f;
+            // 灰条要盖住设置行与底部提示行，两行合计约 44 像素，
+            // 原来只有 42，下缘会露出列表内容
+            UI.Fill(new Rect(_window.x + 1f, y - 6f, _window.width - 2f, 48f),
                 new Color(1f, 1f, 1f, 0.03f));
 
             float x = _window.x + 12f;
@@ -860,8 +845,7 @@ namespace SeaPowerDynamicMusic
             }
 
             // 暂停 / 继续
-            float wPause = EstimateTextWidth(
-                player.IsPlaying ? Lang.BtnPause : Lang.BtnResume) + 26f;
+            float wPause = 68f;
             float xPause = xScan - gap - wPause;
             if (UI.Click(new Rect(xPause, y, wPause, bh),
                     player.IsPlaying ? Lang.BtnPause : Lang.BtnResume))
@@ -872,8 +856,7 @@ namespace SeaPowerDynamicMusic
             }
 
             // 原版模式
-            float wVanilla = EstimateTextWidth(
-                settings.VanillaMode ? Lang.BtnExitVanilla : Lang.BtnVanilla) + 26f;
+            float wVanilla = settings.VanillaMode ? 96f : 78f;
             float xVanilla = xPause - gap - wVanilla;
             if (UI.Click(new Rect(xVanilla, y, wVanilla, bh),
                     settings.VanillaMode ? Lang.BtnExitVanilla : Lang.BtnVanilla))
@@ -894,36 +877,30 @@ namespace SeaPowerDynamicMusic
                 SetStatus(Lang.StatusSaved);
             }
 
-            // 状态提示画在提示行所在的那一行（y - 22），临时覆盖帮助文字。
-            // 之前画在 y + 20，与 GitHub 地址（y + 24）重叠，
-            // 一点按钮就被地址盖住，看起来像提示行消失了。
-            // 恢复时间到后自动回落到帮助文字。
-            bool showStatus = !string.IsNullOrEmpty(_status)
-                && Time.realtimeSinceStartup < _statusUntil;
-
-            if (showStatus)
+            if (!string.IsNullOrEmpty(_status) && Time.realtimeSinceStartup < _statusUntil)
             {
-                UI.Label(new Rect(_window.x + 12f, y - 22f, _window.width - 24f, 18f),
+                // 与帮助文字同一行、同一位置（y + 20），互斥显示。
+                // 宽度只取左侧部分，避开右侧的 GitHub 地址。
+                // 之前画在 y + 20 但宽度是整行，与地址重叠；
+                // 后来改到 y - 22 又多出一行。这版保持一行。
+                UI.Label(new Rect(_window.x + 12f, y + 20f,
+                    _window.width - 372f, 18f),
                     _status, false, false, true);
             }
             else
             {
                 // 底部提示：操作说明 + 作者与项目地址。
                 // 之前这里放的是排查输入用的诊断信息，对玩家没有意义，已换掉。
-                // 提示行放在设置栏「上方」。原先放在 y + 20，
-                // 而 y 已经是 yMax - 46，往下 20 就超出窗口下缘，
-                // 右侧地址被切掉一半。
-                float wHelp = _window.width - 24f;
-                UI.Label(new Rect(_window.x + 12f, y - 22f, wHelp, 18f),
+                float wHelp = _window.width - 340f;
+                UI.Label(new Rect(_window.x + 12f, y + 20f, wHelp, 18f),
                     string.Format(Lang.HelpLine, ModConfig.PanelKey), false, true);
 
-            }
+                // 项目地址放右下角，与底部按钮同一条
+                UI.Label(new Rect(_window.xMax - 322f, y + 20f, 310f, 18f),
+                    "github.com/AngelBamboo/SeaPowerDynamicMusic",
+                    false, true, false, TextAnchor.MiddleRight);
 
-            // GitHub 地址单独一行，放在按钮下方。
-            // 之前与帮助文字同行（都在 y-22），挤在按钮上方。
-            UI.Label(new Rect(_window.x + 12f, y + bh + 2f, _window.width - 24f, 16f),
-                "github.com/AngelBamboo/SeaPowerDynamicMusic",
-                false, true, false, TextAnchor.MiddleRight);
+            }
         }
 
         /// <summary>
