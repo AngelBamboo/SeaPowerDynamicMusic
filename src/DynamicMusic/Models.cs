@@ -764,6 +764,37 @@ namespace SeaPowerDynamicMusic
             return (fallback ?? "").Replace(" ", "").ToLowerInvariant();
         }
 
+        /// <summary>
+        /// 游戏声明的官方曲目总数，取自 MusicManager._allClips.Count。
+        /// 收集循环以它为完成条件。读不到时返回 0，调用方会继续等。
+        /// </summary>
+        internal static int ExpectedTrackCount
+        {
+            get
+            {
+                try
+                {
+                    Type mm = AccessTools.TypeByName("SeaPower.MusicManager");
+                    if (mm == null || mm.BaseType == null) return 0;
+
+                    var getter = AccessTools.Method(mm.BaseType, "get_Instance");
+                    if (getter == null) return 0;
+                    object manager = getter.Invoke(null, null);
+                    if (manager == null) return 0;
+
+                    var listField = AccessTools.Field(mm, "_allClips");
+                    if (listField == null) return 0;
+
+                    var list = listField.GetValue(manager) as System.Collections.ICollection;
+                    return list != null ? list.Count : 0;
+                }
+                catch
+                {
+                    return 0;
+                }
+            }
+        }
+
         /// <summary>在 _allClips 里按 AudioClip 反查 _side。</summary>
         private static string SideFromAllClips(AudioClip clip)
         {

@@ -144,7 +144,7 @@ namespace SeaPowerDynamicMusic
         /// </summary>
         private IEnumerator WaitAndCollectOfficial()
         {
-            const float maxWait = 40f;
+            float maxWait = 40f;
             float start = Time.realtimeSinceStartup;
             int before = 0;
 
@@ -157,33 +157,32 @@ namespace SeaPowerDynamicMusic
                     Plugin.LogInfo(string.Format("已载入 {0} 首官方音乐", got));
                 }
 
-                int total = 0;
-                foreach (MusicScene s in Enum.GetValues(typeof(MusicScene)))
-                {
-                    foreach (var t in Library.GetTracks(s))
-                    {
-                        if (t.Official) total++;
-                    }
-                }
-                total = Library.OfficialCount;
+                int total = Library.OfficialCount;
 
-                if (total > before) before = total;
-
-                // 7 个官方 bundle 全部到位就收工
-                if (before >= 7) break;
-
-                if (Time.realtimeSinceStartup - start > maxWait)
+                if (total > before)
                 {
                     if (before > 0)
                     {
-                        Plugin.LogWarn(string.Format(
-                            "只等到 {0} 首官方音乐，其余的可在面板点“重新扫描”补齐。", before));
+                        Plugin.LogInfo(string.Format(
+                            "官方音乐继续载入中 {0} -> {1} 首", before, total));
                     }
-                    else
-                    {
-                        Plugin.LogWarn("未等到官方音乐，面板里将只有你自己的曲子。");
-                    }
-                    break;
+                    before = total;
+                }
+
+                // 以游戏自己声明的官方曲目总数为准。
+                // 之前写死 7（bundle 数），但实际曲目是 22 首，
+                // 达到 7 首就收工，导致大部分官方音乐没被收集。
+                int expected = OfficialMusic.ExpectedTrackCount;
+                if (expected > 0 && before >= expected) break;
+
+                if (Time.realtimeSinceStartup - start > maxWait)
+                {
+                    // 超时不代表只有这些。游戏可能还在加载资源，
+                    // 继续在后台补齐，玩家不需要手动点重新扫描。
+                    Plugin.LogWarn(string.Format(
+                        "等了 {0} 秒只收到 {1} 首官方音乐，将继续在后台收集。",
+                        (int)maxWait, before));
+                    maxWait += 30f;
                 }
 
                 yield return new WaitForSecondsRealtime(1f);

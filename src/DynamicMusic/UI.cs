@@ -146,12 +146,22 @@ namespace SeaPowerDynamicMusic
         {
             if (string.IsNullOrEmpty(text)) return text;
 
-            // 中文按 12 像素宽估，英文按 6.5 像素宽估
+            // 中文按 12 像素宽估，英文按 6.5 像素宽估。
+            // 界面切成英文后，标签会明显变长（如 Categories / Strategic Map），
+            // 按中文宽度算出的框装不下就会逐字竖排。
+            // 这里对纯英文文本给一个下限，避免估算过窄。
+            bool asciiOnly = true;
+            for (int k = 0; k < text.Length; k++)
+            {
+                if (text[k] > 127) { asciiOnly = false; break; }
+            }
+            float perChar = asciiOnly ? 7.2f : 12f;
+
             float w = 0f;
             int i = 0;
             for (; i < text.Length; i++)
             {
-                w += text[i] > 127 ? 12f : 6.5f;
+                w += text[i] > 127 ? 12f : perChar;
                 if (w > width) break;
             }
 

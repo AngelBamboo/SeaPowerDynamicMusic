@@ -177,8 +177,12 @@ namespace SeaPowerDynamicMusic
             float bottom = _window.yMax - 52f;
             float height = bottom - top;
 
-            float colGroup = 112f;
-            float colScene = 146f;
+            // 列宽随语言调整。英文的分类名明显更长
+            // （"Strategic Map" 14 字符，中文「战略地图」只有 4 个字宽），
+            // 用中文宽度硬套会让文字被挤成竖排。
+            bool en = Lang.Current == UiLang.English;
+            float colGroup = en ? 128f : 112f;
+            float colScene = en ? 168f : 146f;
             float gap = 8f;
 
             float x = _window.x + 12f;
@@ -302,15 +306,13 @@ namespace SeaPowerDynamicMusic
 
         private void DrawTitleBar()
         {
-            // 左上角语言切换。放在标题之前，
-            // 点击范围与标题文字分开，不会误触拖动窗口。
-            var langBtn = new Rect(_window.x + 4f, _window.y + 1f, 52f, 26f);
-            bool inLang = MouseInput.Contains(langBtn);
-            UI.Fill(langBtn, inLang ? UI.ButtonHover : UI.Button);
-            UI.Label(langBtn,
-                Lang.Current == UiLang.Chinese ? "简中/ENG" : "ENG/简中",
-                false, false, false, TextAnchor.MiddleCenter);
-            if (UI.Click(langBtn, Lang.Current == UiLang.Chinese ? "简中/ENG" : "ENG/简中"))
+            // 左上角语言切换。横排显示，宽度给足。
+            // 不画悬停高亮——按钮是常驻指示器，不是动作按钮，
+            // 鼠标移上去变色反而像在提示「可以点这里」。
+            var langBtn = new Rect(_window.x + 4f, _window.y + 2f, 74f, 24f);
+            UI.Fill(langBtn, UI.Button);
+            UI.Label(langBtn, "简中/ENG", false, true, false, TextAnchor.MiddleCenter);
+            if (UI.Click(langBtn, "简中/ENG"))
             {
                 Lang.Toggle();
                 ModConfig.Settings.Language = Lang.Current;
@@ -322,7 +324,7 @@ namespace SeaPowerDynamicMusic
             // 标题在扣除右侧作者区后的区域里居中，
             // 否则右上角的作者信息会与居中标题重叠。
             const float authorW = 152f;
-            const float langW = 56f;
+            const float langW = 78f;
             var r = new Rect(_window.x + langW, _window.y + 1f,
                 _window.width - authorW - langW - 2f, 26f);
             UI.Label(r, Lang.Title + "  Dynamic Music  v" + Plugin.Version,
@@ -342,7 +344,7 @@ namespace SeaPowerDynamicMusic
 
             // 左上角是语言切换按钮，不属于拖动区。
             // 不排除的话点它会同时拖动窗口，两种操作叠在一起。
-            var langZone = new Rect(_window.x + 4f, _window.y + 1f, 52f, 26f);
+            var langZone = new Rect(_window.x + 4f, _window.y + 2f, 74f, 24f);
 
             if (MouseInput.Pressed && MouseInput.Contains(bar)
                 && !MouseInput.Contains(langZone))
@@ -737,7 +739,10 @@ namespace SeaPowerDynamicMusic
             }
             x += 60f;
 
-            if (UI.Checkbox(new Rect(x, y, 92f, 20f), settings.IncludeOfficial, Lang.IncludeOfficial))
+            // 英文 Include official 比中文长，宽度按语言给
+            float wOfficial = Lang.Current == UiLang.English ? 128f : 92f;
+            if (UI.Checkbox(new Rect(x, y, wOfficial, 20f),
+                settings.IncludeOfficial, Lang.IncludeOfficial))
             {
                 settings.IncludeOfficial = !settings.IncludeOfficial;
                 ModConfig.Settings = settings;
