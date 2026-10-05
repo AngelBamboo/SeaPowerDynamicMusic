@@ -17,6 +17,66 @@ namespace SeaPowerDynamicMusic
     /// </summary>
     public class MusicLibrary
     {
+        /// <summary>
+        /// 曲目的显示顺序：按名称自然排序。
+        ///
+        /// 直接用 string.Compare 是字典序，
+        /// 「Air - Track 10」会排在「Air - Track 2」前面
+        /// （'1' < '2'），曲名带序号时顺序完全乱掉。
+        /// 这里把名称拆成「文本段 + 数字段」逐段比较，
+        /// 数字段按数值比，于是 2 排在 10 前面。
+        /// </summary>
+        private static int CompareByName(MusicTrack a, MusicTrack b)
+        {
+            return NaturalCompare(a.DisplayName, b.DisplayName);
+        }
+
+        /// <summary>
+        /// 自然序比较：数字段按数值大小比，其余按字符比。
+        /// 「Track 2」&lt;「Track 10」，「a2b」&lt;「a10b」。
+        /// </summary>
+        private static int NaturalCompare(string x, string y)
+        {
+            string a = x ?? "";
+            string b = y ?? "";
+            int i = 0, j = 0;
+
+            while (i < a.Length && j < b.Length)
+            {
+                bool da = char.IsDigit(a[i]);
+                bool db = char.IsDigit(b[j]);
+
+                if (da && db)
+                {
+                    // 连续数字作为整体比较，跳过前导零
+                    int si = i, sj = j;
+                    while (i < a.Length && char.IsDigit(a[i])) i++;
+                    while (j < b.Length && char.IsDigit(b[j])) j++;
+
+                    string na = a.Substring(si, i - si).TrimStart('0');
+                    string nb = b.Substring(sj, j - sj).TrimStart('0');
+
+                    if (na.Length != nb.Length)
+                        return na.Length < nb.Length ? -1 : 1;
+
+                    int cmp = string.CompareOrdinal(na, nb);
+                    if (cmp != 0) return cmp;
+                }
+                else
+                {
+                    // 文本段不区分大小写，与原来的 OrdinalIgnoreCase 一致
+                    int cmp = char.ToUpperInvariant(a[i])
+                        .CompareTo(char.ToUpperInvariant(b[j]));
+                    if (cmp != 0) return cmp;
+                    i++;
+                    j++;
+                }
+            }
+
+            // 一方走完，另一方还剩内容
+            return (a.Length - i).CompareTo(b.Length - j);
+        }
+
         /// <summary>目录名到场景的别名表，方便用中文或其它写法建文件夹。</summary>
         private static readonly Dictionary<string, MusicScene> FolderAliases =
             new Dictionary<string, MusicScene>(StringComparer.OrdinalIgnoreCase)
@@ -144,8 +204,7 @@ namespace SeaPowerDynamicMusic
             // 稳定排序，保证顺序可预期
             foreach (var kv in _byScene)
             {
-                kv.Value.Sort((a, b) => string.Compare(a.DisplayName, b.DisplayName,
-                    StringComparison.OrdinalIgnoreCase));
+                kv.Value.Sort(CompareByName);
             }
 
             Plugin.LogInfo(string.Format(
@@ -414,8 +473,7 @@ namespace SeaPowerDynamicMusic
             }
             foreach (var kv in _byScene)
             {
-                kv.Value.Sort((a, b) => string.Compare(a.DisplayName, b.DisplayName,
-                    StringComparison.OrdinalIgnoreCase));
+                kv.Value.Sort(CompareByName);
             }
         }
 
