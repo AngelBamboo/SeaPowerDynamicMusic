@@ -173,8 +173,15 @@ namespace SeaPowerDynamicMusic
                 return;
             }
 
-            float top = _window.y + 56f;
-            float bottom = _window.yMax - 52f;
+            // 三列的纵向范围：标题栏 26 + 状态条 30 = 56；
+            // 底部设置栏 20 + 提示行 18 + 间隔 6 = 44。
+            // 两个数与 DrawFooter 里实际画的位置对应，
+            // 不然列表会压到设置栏下面或留出空白。
+            const float TOP_INSET = 56f;
+            const float BOTTOM_INSET = 44f;
+
+            float top = _window.y + TOP_INSET;
+            float bottom = _window.yMax - BOTTOM_INSET;
             float height = bottom - top;
 
             // 左菜单两列取两种语言里较宽的那个，中英文切换时宽度不变。
@@ -327,7 +334,8 @@ namespace SeaPowerDynamicMusic
             const float langW = 78f;
             var r = new Rect(_window.x + langW, _window.y + 1f,
                 _window.width - authorW - langW - 2f, 26f);
-            UI.Label(r, Lang.Title + "  Dynamic Music  v" + Plugin.Version,
+            // 标题随语言切换，不再额外拼接英文名（之前会重复显示两遍）
+            UI.Label(r, Lang.Title + "  v" + Plugin.Version,
                 true, false, false, TextAnchor.MiddleCenter);
 
             // 右上角只放作者信息，GitHub 地址在右下角
@@ -489,8 +497,10 @@ namespace SeaPowerDynamicMusic
             var listRect = new Rect(area.x, listY, area.width - 8f, listH);
             UI.Fill(listRect, new Color(0f, 0f, 0f, 0.15f));
 
-            // 滚动。有筛选时按筛选后的数量算，否则滚动条长度会不对
-            float rowH = 58f;
+            // 行高。绘制时用 rowH - ROW_GAP，两者必须同源，
+            // 否则内容高度与实际绘制对不上，列表会算出偏大的高度。
+            const float rowH = 58f;
+            const float ROW_GAP = 2f;
             int matchCount = 0;
             if (!string.IsNullOrEmpty(_filter))
             {
@@ -571,10 +581,12 @@ namespace SeaPowerDynamicMusic
                 float rowY = listY + shown * rowH - _trackScroll;
                 shown++;
 
-                if (rowY + rowH < listY || rowY > area.yMax) continue;   // 裁掉不可见行
+                // 上界用 listRect.yMax 而不是 area.yMax。
+                // area 比列表框高（要放小标题），用 area.yMax 会让行画到框外。
+                if (rowY + rowH < listY || rowY > listRect.yMax) continue;
 
                 DrawTrackRow(t, director, player,
-                    new Rect(area.x + 2f, rowY, listRect.width - 4f, rowH - 2f));
+                    new Rect(area.x + 2f, rowY, listRect.width - 4f, rowH - ROW_GAP));
             }
 
             UI.PopClip();
@@ -645,27 +657,44 @@ namespace SeaPowerDynamicMusic
             // 权重
             // 标签宽度按文字算。之前固定 28 像素，中文「优先」勉强，
             // 英文 Weight / Prio 装不下就被截断或竖排。
-            float wLabel = EstimateTextWidth(Lang.Weight) + 4f;
+            // 整段按标签宽度顺序推进，不用固定偏移。
+            // 之前只把标签改成动态，后面的滑块与数值仍是写死的 x+388 / x+460，
+            // 英文标签一变宽就压到滑块上（截图里 Weight 与滑块重叠）。
+            float wLabel = EstimateTextWidth(Lang.Weight) + 6f;
             UI.Label(new Rect(x + 360f, y, wLabel, 22f), Lang.Weight, false, true);
-            var wSlider = new Rect(x + 388f, y + 6f, 68f, 10f);
+            float wCursor = x + 360f + wLabel;
+
+            var wSlider = new Rect(wCursor, y + 6f, 68f, 10f);
             if (UI.Slider(wSlider, t.Weight, 0f, 3f))
             {
                 t.Weight = UI.ValueFromDrag(wSlider, 0f, 3f);
             }
-            UI.Label(new Rect(x + 460f, y, 30f, 22f), t.Weight.ToString("0.0"), false, true);
+            wCursor += 72f;
+
+            UI.Label(new Rect(wCursor, y, 30f, 22f),
+                t.Weight.ToString("0.0"), false, true);
+            wCursor += 34f;
 
             // 优先级
-            UI.Label(new Rect(x + 494f, y, wLabel + 4f, 22f), Lang.Priority, false, true);
-            var pSlider = new Rect(x + 522f, y + 6f, 58f, 10f);
+            float wPrio = EstimateTextWidth(Lang.Priority) + 6f;
+            UI.Label(new Rect(wCursor, y, wPrio, 22f), Lang.Priority, false, true);
+            wCursor += wPrio;
+
+            var pSlider = new Rect(wCursor, y + 6f, 58f, 10f);
             if (UI.Slider(pSlider, t.Priority, 0f, 5f))
             {
                 t.Priority = Mathf.RoundToInt(UI.ValueFromDrag(pSlider, 0f, 5f));
             }
-            UI.Label(new Rect(x + 584f, y, 20f, 22f), t.Priority.ToString(), false, true);
+            wCursor += 62f;
+
+            UI.Label(new Rect(wCursor, y, 20f, 22f),
+                t.Priority.ToString(), false, true);
+            wCursor += 24f;
 
             // 时长
             if (t.IsLoaded)
-                UI.Label(new Rect(x + 608f, y, 44f, 22f), FormatDuration(t.Duration), false, true);
+                UI.Label(new Rect(wCursor, y, 44f, 22f),
+                    FormatDuration(t.Duration), false, true);
             else if (t.LoadFailed)
                 UI.Label(new Rect(x + 608f, y, 44f, 22f), "失败", false, false, true);
             else
@@ -734,7 +763,9 @@ namespace SeaPowerDynamicMusic
             var lib = host != null ? host.Library : null;
 
             float y = _window.yMax - 46f;
-            UI.Fill(new Rect(_window.x + 1f, y - 4f, _window.width - 2f, 42f),
+            // 灰条要盖住设置行与底部提示行，两行合计约 44 像素，
+            // 原来只有 42，下缘会露出列表内容
+            UI.Fill(new Rect(_window.x + 1f, y - 6f, _window.width - 2f, 48f),
                 new Color(1f, 1f, 1f, 0.03f));
 
             float x = _window.x + 12f;

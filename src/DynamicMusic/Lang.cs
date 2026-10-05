@@ -150,7 +150,7 @@ namespace SeaPowerDynamicMusic
         internal static string NoMatch => T("没有匹配的曲目。", "No matching tracks.");
 
         internal static string Author => T("作者：Angel.Bamboo", "Author: Angel.Bamboo");
-        internal static string Title => T("动态音乐", "Dynamic Music");
+        internal static string Title => T("海权动态音乐", "Sea Power Dynamic Music");
         internal static string HelpLine => T(
             "{0} 开关面板 · 曲名右侧方框是启用开关 · 权重为被抽中概率，0 不参与 · 优先数字越大越先播",
             "{0} toggles panel · box right of name is on/off · weight = chance (0 = off) · higher priority first");
