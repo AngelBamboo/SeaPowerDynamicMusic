@@ -1,5 +1,7 @@
 # Sea Power Dynamic Music
 
+简体中文 | [English](README.en.md)
+
 为 [Sea Power: Naval Combat in the Missile Age](https://store.steampowered.com/app/1636790/Sea_Power/) 做的动态背景音乐模组。
 
 在主菜单、战略地图、战役内外、任务结算之间自动切换音乐。
@@ -66,8 +68,8 @@ Sea Power\
 
 ```ini
 [WP]
-Track01=D://Music//wp_battle.mp3
-Track02=D://Music//wp_tension.ogg
+Track01=D:/Music/wp_battle.mp3
+Track02=D:/Music/wp_tension.ogg
 ```
 
 注意必须写成 `Track01=路径` 这种带等号的形式，单独一行路径会在配置回写时丢失。
@@ -81,7 +83,7 @@ Track02=D://Music//wp_tension.ogg
 其中 `[Tracks]` 段由模组自动维护，记录每首曲子的归属、权重与优先级：
 
 ```
-T1A2B3C4D=WP,Nato|1.5|2|0|D://Music//battle.mp3
+T1A2B3C4D=WP,Nato|1.5|2|0|D:/Music/battle.mp3
 ```
 
 依次是：键、分类列表（逗号分隔）、权重、优先级、是否停用、文件路径。
@@ -141,149 +143,12 @@ T1A2B3C4D=WP,Nato|1.5|2|0|D://Music//battle.mp3
 「含官方音乐」取消勾选后，官方曲目不参与随机；
 但某个场景下你自己没有可播的曲子时，会自动改播对应的官方音乐。
 
-## 工作原理
+## 进阶
 
-### 单一音乐控制源
+想了解模组怎么工作、如何从源码编译，见
+[开发文档](docs/开发文档.md)。
 
-模组接管全部音乐播放，游戏的原生播放被拦截，避免两路声音叠在一起。
-面板里的「原版模式」可以随时解除接管，交还给游戏按原本逻辑播放；
-切回时模组会显式停掉游戏当前那一首，否则会与自定义音乐同时响起。
-
-拦截的做法是在 `MusicManager` 的三个播放入口前置 Harmony 前缀，
-只阻止「以后起播」；已在播放的音频需要显式调 `Stop` 才能停。
-**不使用** `RemoveCurrentTrack`，那个方法会把曲目从游戏列表里删除，
-导致每次重新扫描可用的官方曲目越来越少。
-
-### 挂接点
-
-| 挂接点 | 方式 | 用途 |
-|---|---|---|
-| `SeaPower.MusicManager.set_MusicManagerMode` | 前缀读取 | 场景切换，拿到主菜单／战略地图／结算／阵营等状态 |
-| `MusicManager.PlayMusic` 等三个播放入口 | 前缀拦截 | 接管模式下阻止游戏自己起播 |
-| `MusicManager._allClips` | 直接读取 | 官方曲目的 `_side` 与 `_mode` |
-| `Globals._assetBundleDictionary` | 直接读取 | 官方音乐包，游戏加载完就能取 |
-
-**不再监听无线电通报。** 早期版本靠 `QueueTransmission` 判断交战与接触，
-但游戏自己的数据结构里没有这套信息——实测 `MusicClipData._side`
-只有 7 个值（`mainmenu` / `strategicmap` / `nato` / `wp` / `night` /
-`victory` / `defeat`），`_mode` 除主菜单外全是 `Game`，
-战况三态在游戏数据里并不存在。原先那套判定是模组自己造的，
-与游戏状态不同步，切换时听感突兀，已按用户要求移除。
-
-### 场景判定
-
-分类与游戏完全对齐：界面（主菜单、战略地图）、战役（北约、华约、夜间）、
-结算（胜利、失败）。战役内按游戏给出的阵营选对应的一组。
-
-游戏在主菜单时也会周期性地把音乐模式设成 `Game`，
-这个信号会被识别为「不在战役内」，
-否则主菜单里会每隔十几秒就在两首完全不同的曲子之间来回跳。
-
-### 官方音乐归类
-
-按 `MusicClipData._side` 直接映射，不再按包名或曲名猜测。
-实测 `_side` 与曲名一致（`Nato 1` 的 `_side` 就是 `nato`），
-所以从 `AudioClip.name` 取值即可。
-
-### 选曲
-
-只在该分类的候选池内选，优先级不跨分类。
-取最高的未播优先级档，同档内按权重加权随机；
-该档全部播过后降到下一档重新一轮。
-正在播放的那首会被排除，不会刚播完又立刻轮到。
-
-同一个大类内切换分类（北约↔华约↔夜间）不会重置已播记录，
-否则战况频繁变化时会反复从头播放高优先级曲目；
-只有离开战役大类、或回到界面与结算时才重置。
-
-某个分类只有一首时会循环播放它，不会因为「排除当前曲」而静音。
-
-### 播放
-
-### 播放
-
-用两个 `AudioSource` 交叉淡化，淡入淡出走 smoothstep 曲线。
-音频是纯 2D，优先级最高，不会被战斗音效挤掉。
-
-所有挂接点都用字符串名反射定位，游戏更新改了签名会跳过并降级，不会崩。
-
-## 项目结构
-
-```
-src/DynamicMusic/          核心程序集，零外部依赖
-  Bootstrap.cs             初始化编排、路径解析、补丁注册
-  ModConfig.cs             配置读写、默认值迁移
-  Models.cs                场景枚举、曲目模型、官方音乐收集
-  MusicLibrary.cs          扫描、加载、分类索引
-  MusicDirector.cs         场景判定、优先级降档、兜底策略
-  MusicPlayer.cs           交叉淡化播放、进度跳转
-  MusicPanel.cs            游戏内管理面板
-  UI.cs                    自绘控件（按钮、勾选框、滑块、输入框、裁剪）
-  MouseInput.cs            Input System 读取与坐标换算
-  InputFocusGuard.cs       输入焦点接管
-  GameSignals.cs           Harmony 挂接与拦截层
-  IniFile.cs               极简 ini 解析
-  Host.cs                  运行时宿主、播放模式切换
-  BepInExEntry.cs          BepInEx 入口（手动安装用）
-
-src/DynamicMusic.AC/       Anchor Chain 桥接程序集
-  AnchorChainEntry.cs      实现 IAnchorChainMod，启动核心
-
-docs/images/               README 用的收款码
-```
-
-### 关于自绘界面
-
-面板没有用 IMGUI 的交互控件，因为这个游戏只启用了新的 Input System，
-而 `GUILayout.Button`、`GUILayout.HorizontalSlider` 这些依赖旧版
-`UnityEngine.Input` 类的 IMGUI 事件流，两者不通。
-表现是面板画得出来但点不动。
-
-`UI.cs` 里的控件全部自绘，点击判定直接读 `Input System`。
-除了控件本身，还要注意两个 Unity 的坑：
-
-- `OnGUI` 每帧会被调用多次（Layout / Repaint / Input），
-  用来判断「这一帧是否刚按下」的边沿必须在 `Update` 里刷新，
-  否则会被第一次调用消耗掉，后续全部失效。
-- 同一帧内 `ConsumeClick` 只放行鼠标所在位置的那个控件，
-  避免一次点击被多个控件重复处理。
-
-坐标换算也在这里处理：游戏的 Input System 报出的 y 原点
-与 IMGUI 约定相反，统一用 `Screen.height - y` 翻转。
-
-拆成两个程序集是因为桥接必须引用 `AnchorChain.dll`，
-而核心保持零外部依赖，这样手动安装的场景不受影响。
-桥接用反射调用核心，两者被加载的先后顺序不影响启动。
-
-## 从源码编译
-
-需要 .NET SDK 8。两个项目都输出到 `netstandard2.1`，
-因为 Unity 2022.3 的程序集引用 netstandard 2.1。
-
-```bash
-cd src/DynamicMusic
-dotnet build -c Release
-
-cd ../DynamicMusic.AC
-dotnet build -c Release
-```
-
-编译前需要准备两个路径，默认值写在 csproj 里，按你的安装位置改：
-
-| 位置 | 默认值 |
-|---|---|
-| `GameDir` | `F:\Steam\steamapps\common\Sea Power` |
-| `lib/AnchorChain.dll` | 从 AnchorChain 的 `dev.zip` 里取 |
-
-构建产物：
-
-```
-src/DynamicMusic/bin/Release/SeaPowerDynamicMusic.dll
-src/DynamicMusic.AC/bin/Release/SeaPowerDynamicMusic.AC.dll
-```
-
-把它们和 `io.github.angelbamboo.dynamicmusic.ini` 一起放进模组文件夹即可。
-
+---
 ## 排查问题
 
 日志在 `BepInEx\LogOutput.log`，搜索 `DynamicMusic` 就能找到本模组的记录，
