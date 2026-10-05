@@ -453,14 +453,22 @@ namespace SeaPowerDynamicMusic
         {
             if (_started) return;
             _started = true;
-            _lastSwitchTime = Time.unscaledTime;
 
-            // 不要写死某个场景。之前切回接管时一律跳到固定分类，
-            // 若玩家当时在胜利画面或战略地图，听到的音乐会与场景不符。
-            // 交给 Update 去 EvaluateScene 判定真实场景，符合「场景跟随」的预期。
+            // 立刻选曲起播，不要等冷却。
+            //
+            // 之前把 _lastSwitchTime 设成当前时间，而 Update 里的
+            // cooldownPassed 要等 SceneSwitchCooldown（默认 15 秒）才成立，
+            // 表现为「点退出原版后十几秒才有声音」。
+            // 这里主动切一次，_lastSwitchTime 由 SwitchTo 正常写入。
             _currentScene = MusicScene.Unassigned;
+            _failedScene = null;
             Recheck();
-            Plugin.LogInfo("已恢复自定义音乐播放，将按当前场景重新选择曲目。");
+
+            MusicScene want = EvaluateScene();
+            SwitchTo(want);
+
+            Plugin.LogInfo(string.Format(
+                "已恢复自定义音乐播放，当前场景 {0}。", SceneInfo.SceneName(want)));
         }
 
         /// <summary>直接播放指定曲目（界面里点选试听）。</summary>

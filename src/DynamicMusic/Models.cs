@@ -435,7 +435,7 @@ namespace SeaPowerDynamicMusic
 
                         var track = new MusicTrack(clip.name, clip, true);
                         // 按游戏自带的 _side 归类，不再猜包名
-                        AddOfficialScenes(track, OfficialSideOf(clip, bundleName));
+                        AddOfficialScenes(track, SideOfClip(clip, bundleName));
                         library.AddOfficial(track);
                         added++;
                     }
@@ -639,7 +639,7 @@ namespace SeaPowerDynamicMusic
                     if (library.FindByClip(clip) != null) continue;
 
                     var track = new MusicTrack(clip.name, clip, true);
-                    AddOfficialScenes(track, OfficialSideOf(clip, clip.name));
+                    AddOfficialScenes(track, SideOfClip(clip, clip.name));
                     library.AddOfficial(track);
                     found++;
                     Plugin.Verbose("从音频源导入官方曲目: " + clip.name);
@@ -745,15 +745,63 @@ namespace SeaPowerDynamicMusic
         }
 
         /// <summary>
-        /// 取官方曲目的 _side 值。
-        /// AudioClip 本身没有这个信息，优先用曲名兜底
-        /// （实测 _side 与曲名一致：Nato 1 的 _side 就是 nato）。
+        /// 取官方曲目的 _side 真值。
+        ///
+        /// 从 MusicManager._allClips 里按 AudioClip 反查 MusicClipData，
+        /// 直接读它自己的 _side 字段。
+        ///
+        /// 之前靠曲名推断，有两个问题：
+        /// 1. 首次启动时游戏还没加载完，部分包拿不到，
+        ///    曲子会落到「未归类」，要等点重新扫描才对。
+        /// 2. 曲名与 _side 并不总一致，白名单式的关键词判断会漏。
+        ///
+        /// 读不到时退回曲名推断，至少不留空。
         /// </summary>
-        private static string OfficialSideOf(AudioClip clip, string fallback)
+        private static string SideOfClip(AudioClip clip, string fallback)
         {
-            string s = clip != null ? clip.name : null;
-            if (string.IsNullOrEmpty(s)) s = fallback;
-            return (s ?? "").Replace(" ", "").ToLowerInvariant();
+            string real = SideFromAllClips(clip);
+            if (!string.IsNullOrEmpty(real)) return real;
+            return (fallback ?? "").Replace(" ", "").ToLowerInvariant();
+        }
+
+        /// <summary>在 _allClips 里按 AudioClip 反查 _side。</summary>
+        private static string SideFromAllClips(AudioClip clip)
+        {
+            if (clip == null) return null;
+            try
+            {
+                Type mm = AccessTools.TypeByName("SeaPower.MusicManager");
+                if (mm == null || mm.BaseType == null) return null;
+
+                var getter = AccessTools.Method(mm.BaseType, "get_Instance");
+                if (getter == null) return null;
+                object manager = getter.Invoke(null, null);
+                if (manager == null) return null;
+
+                var listField = AccessTools.Field(mm, "_allClips");
+                if (listField == null) return null;
+
+                var list = listField.GetValue(manager) as System.Collections.IEnumerable;
+                if (list == null) return null;
+
+                foreach (object item in list)
+                {
+                    if (item == null) continue;
+                    Type ct = item.GetType();
+
+                    var clipField = AccessTools.Field(ct, "_clip");
+                    if (clipField == null) continue;
+                    if (!ReferenceEquals(clipField.GetValue(item), clip)) continue;
+
+                    var sideField = AccessTools.Field(ct, "_side");
+                    return sideField != null ? sideField.GetValue(item) as string : null;
+                }
+            }
+            catch
+            {
+                // 读不到就走曲名兜底，不影响功能
+            }
+            return null;
         }
 
         /// <summary>

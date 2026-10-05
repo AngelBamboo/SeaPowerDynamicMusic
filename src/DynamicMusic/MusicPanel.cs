@@ -207,7 +207,12 @@ namespace SeaPowerDynamicMusic
 
             float x = bar.x + 4f;
 
-            UI.Label(new Rect(x, y, 58f, 24f), "正在播放", false, true);
+            // 暂停时在这里改文案，而不是在进度条右侧另画一个「已暂停」。
+            // 之前那个标签画在 x 已累加到进度条之后的位置，宽度不足会溢出状态栏，
+            // 视觉上叠到右上角的标题栏上。
+            bool playing = player.IsPlaying;
+            UI.Label(new Rect(x, y, 58f, 24f),
+                playing ? "正在播放" : "已暂停", false, true, !playing);
             x += 60f;
 
             var cur = player.CurrentTrack;
@@ -288,10 +293,6 @@ namespace SeaPowerDynamicMusic
                     FormatDuration(cur.Duration), false, true);
                 x += wTime;
 
-                if (!player.IsPlaying)
-                {
-                    UI.Label(new Rect(x, y, 46f, 24f), "已暂停", false, false, true);
-                }
             }
 
             UI.Label(new Rect(bar.xMax - wStat, y, wStat - 4f, 24f),
@@ -758,7 +759,7 @@ namespace SeaPowerDynamicMusic
             {
                 if (player.IsPlaying) player.Pause();
                 else player.UnPause();
-                SetStatus(player.IsPlaying ? "继续播放" : "已暂停");
+                SetStatus(player.IsPlaying ? "已继续播放" : "已暂停");
             }
 
             // 原版模式
