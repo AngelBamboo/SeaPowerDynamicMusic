@@ -906,6 +906,9 @@ namespace SeaPowerDynamicMusic
             if (ini == null || lib == null) return;
             if (!ini.HasSection("Tracks")) return;
 
+            int matched = 0;
+            int missed = 0;
+
             foreach (var kv in ini.GetSection("Tracks"))
             {
                 // 值的格式：分类|权重|优先级|排除|路径
@@ -914,7 +917,16 @@ namespace SeaPowerDynamicMusic
 
                 string path = parts[4].Trim();
                 MusicTrack track = lib.GetTrack(path);
-                if (track == null) continue;
+                if (track == null)
+                {
+                    // 路径对不上时记一条，否则用户只看到「设置没保存」，
+                    // 不知道是写失败了还是没匹配上。
+                    missed++;
+                    Plugin.Verbose(string.Format(
+                        "配置路径未匹配: {0}", path));
+                    continue;
+                }
+                matched++;
 
                 track.Scenes.Clear();
                 foreach (string name in parts[0].Split(','))
@@ -936,6 +948,10 @@ namespace SeaPowerDynamicMusic
 
                 track.Excluded = parts[3].Trim() == "1";
             }
+
+            Plugin.LogInfo(string.Format(
+                "已从配置读回 {0} 首曲目的设置，未匹配 {1} 首",
+                matched, missed));
         }
 
         public void ApplySettings(MusicSettings s)
