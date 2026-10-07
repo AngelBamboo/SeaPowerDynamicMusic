@@ -894,6 +894,16 @@ namespace SeaPowerDynamicMusic
             ini.ReplaceSection("Tracks", lines);
         }
 
+        /// <summary>把曲目的归属列成可读形式，便于比较读前读后。</summary>
+        private static string DescribeScenes(MusicTrack t)
+        {
+            if (t.Scenes.Count == 0) return "(空)";
+            var names = new List<string>();
+            foreach (MusicScene s in t.Scenes) names.Add(s.ToString());
+            names.Sort();
+            return string.Join("+", names.ToArray());
+        }
+
         /// <summary>曲目的配置键。用路径哈希，重扫后仍能对上同一首曲子。</summary>
         internal static string TrackKey(MusicTrack t)
         {
@@ -928,6 +938,8 @@ namespace SeaPowerDynamicMusic
                 }
                 matched++;
 
+                string before = DescribeScenes(track);
+
                 track.Scenes.Clear();
                 foreach (string name in parts[0].Split(','))
                 {
@@ -935,6 +947,16 @@ namespace SeaPowerDynamicMusic
                     if (Enum.TryParse(name.Trim(), true, out s)) track.Scenes.Add(s);
                 }
                 if (track.Scenes.Count == 0) track.Scenes.Add(track.PrimaryScene);
+
+                // 读回会覆盖扫描阶段的归属。两者不一致时记一条，
+                // 否则用户只看到「保存没生效」，看不出是读错了还是没读。
+                string after = DescribeScenes(track);
+                if (before != after)
+                {
+                    Plugin.LogInfo(string.Format(
+                        "归属被配置覆盖: {0}  {1} -> {2}",
+                        System.IO.Path.GetFileName(track.FilePath), before, after));
+                }
 
                 float w;
                 if (float.TryParse(parts[1], System.Globalization.NumberStyles.Float,
