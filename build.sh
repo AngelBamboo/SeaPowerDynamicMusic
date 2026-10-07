@@ -64,18 +64,22 @@ echo "把 $DIST/$PKG_NAME 整个文件夹放进 Sea Power_Data/StreamingAssets/ 
 # 但音乐包靠目录结构被识别：MusicLibrary\<分类名>\ 下有音频文件即可。
 # DynamicMusic 的 CollectLibraryRoots 会自动发现并加入这些目录。
 # ---------------------------------------------------------------------
-PACK_SRC="../SeaPowerMusicPack"
+PACK_SRC="packaging/musicpack"
 PACK_NAME="SeaPowerMusicPack"
 
 if [ -d "$PACK_SRC" ]; then
   echo "==> 组装音乐扩展包"
   rm -rf "$DIST/$PACK_NAME"
   mkdir -p "$DIST/$PACK_NAME"
+  # .gitkeep 保留在成品里。zip 会保存文件而不保存空目录，
+  # 音乐包的分类目录必须靠这些占位文件才能进包，
+  # 否则空分类丢失，上传后 LooksLikeMusicPack 可能判定失败。
+  # 音乐放进来后 .gitkeep 与音频并存，不影响识别。
   cp -r "$PACK_SRC/MusicLibrary" "$DIST/$PACK_NAME/"
   [ -f "$PACK_SRC/_info.ini" ] && cp "$PACK_SRC/_info.ini" "$DIST/$PACK_NAME/"
   [ -f "$PACK_SRC/README.md" ] && cp "$PACK_SRC/README.md" "$DIST/$PACK_NAME/"
 
-  # 中文封面给本体，英文封面给音乐包
+  # 音乐包用英文封面
   if [ -f "tools/covers/cover_en.jpg" ]; then
     cp "tools/covers/cover_en.jpg" "$DIST/$PACK_NAME/cover.jpg"
   fi
@@ -100,7 +104,6 @@ name = sys.argv[1]
 src = os.path.join("dist", name)
 dst = os.path.join("dist", name + ".zip")
 skip_ext = (".pdb", ".bak")
-skip_pref = (".",)
 
 count = 0
 with zipfile.ZipFile(dst, "w", zipfile.ZIP_DEFLATED) as z:
@@ -108,7 +111,9 @@ with zipfile.ZipFile(dst, "w", zipfile.ZIP_DEFLATED) as z:
         for f in files:
             if f.lower().endswith(skip_ext):
                 continue
-            if f.startswith(skip_pref):
+            # 只跳过 "." 与 ".." 两项，不能用 startswith(".")——
+            # .gitkeep 是让空分类目录能进 zip 的占位文件，必须保留。
+            if f in (".", ".."):
                 continue
             full = os.path.join(root, f)
             rel = os.path.relpath(full, "dist")

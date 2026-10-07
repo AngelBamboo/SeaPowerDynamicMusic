@@ -1,0 +1,8 @@
+Music that follows the game: it switches by itself between the main menu, strategic map, in-mission and mission results.
+
+Press F7 in game to open the panel. You can audition tracks, adjust weight and priority, pause, scrub and rescan. The panel speaks Chinese or English and follows the game language by default.
+
+The 22 official tracks that ship with the game can be used straight away. They reuse audio the game has already loaded, so nothing extra is downloaded. You can also drop your own mp3 / ogg / wav / aiff files into the category folders under MusicLibrary, or install the Dynamic Music Pack.
+
+Requires Anchor Chain:
+https://steamcommunity.com/sharedfiles/filedetails/?id=3380210757
