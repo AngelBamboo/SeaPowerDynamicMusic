@@ -26,10 +26,19 @@ namespace SeaPowerDynamicMusic.Bridge
     /// 这样核心程序集被加载的先后顺序不会影响启动。
     /// </summary>
     //
-    // 依赖 Anchor Chain（V1.1.0 起）。版本区间取 1.0.0 到不限上界，
-    // 因为后续小版本不会改动本模组依赖的接口。
+    // 不加 [ACDependency]。
+    // Anchor Chain 只加载并识别实现了 IAnchorChainMod 的类型，
+    // 它自己不是插件条目——日志里也只有「Loaded AnchorChain V1.1.0!」，
+    // 没有对应的「Loaded plugin ...」。
+    // 它的 io.github.seapower_modders.anchorchain 是 BepInEx 的插件 ID，
+    // 不在 AC 的插件表里。
+    //
+    // 声明依赖后 AC 会判定找不到该依赖，直接跳过本模组：
+    //   Skipping mod "..." (guid); missing dependency "..."
+    // 结果 dll 被加载但 TriggerEntryPoint 不会被调用，F7 无反应。
+    //
+    // 没装 Anchor Chain 时本类根本不会被加载，行为已经正确。
     [ACPlugin(PluginId, DisplayName, ModVersion)]
-    [ACDependency(AnchorChainGuid, "1.0.0", null)]
     public class AnchorChainEntry : IAnchorChainMod
     {
         /// <summary>
@@ -38,12 +47,6 @@ namespace SeaPowerDynamicMusic.Bridge
         /// </summary>
         public const string PluginId = "io.github.angelbamboo.dynamicmusic";
 
-        /// <summary>
-        /// Anchor Chain 的标识，取自它 Main.cs 里的 BepInPlugin 特性。
-        /// 声明依赖后，用户没装 Anchor Chain 时工坊会给出提示，
-        /// 而不是启动后静默失败。
-        /// </summary>
-        private const string AnchorChainGuid = "io.github.seapower_modders.anchorchain";
 
         public const string DisplayName = "Sea Power Dynamic Music";
         public const string ModVersion = "1.0.0";
