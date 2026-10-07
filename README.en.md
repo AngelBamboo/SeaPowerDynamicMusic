@@ -29,6 +29,8 @@ playing, or you can replace them all with your own.
 - **One-click vanilla mode**. Hand playback back to the game entirely, and switch
   back whenever you like.
 - **In-game panel**. Press F7. Browse, audition, adjust, pause, scrub, rescan.
+- **Chinese and English UI**. Toggle in the top-left corner; follows the game
+  language the first time it opens.
 - **Crossfade between categories**. Two AudioSources cross-fade, so tracks never cut
   off abruptly.
 
@@ -51,6 +53,23 @@ Dropping just `SeaPowerDynamicMusic.dll` into `BepInEx\plugins\` also works — 
 its own BepInEx entry point and does not rely on Anchor Chain's config handling.
 
 ## Usage
+
+### Music packs
+
+Music can be shipped separately as a pack instead of bundled with the mod.
+A pack is just a folder of category directories; the mod scans the Steam
+Workshop directory on startup and adds whatever it finds to the library:
+
+```
+SeaPowerMusicPack\
+  MusicLibrary\
+    MainMenu\    Nato\      WP\
+    Night\       StrategicMap\  Victory\  Defeat\
+```
+
+Keep the `.gitkeep` files in those folders. Workshop zips do not store empty
+directories, so removing them loses the category.
+
 
 Press **F7** in game to open the panel.
 
