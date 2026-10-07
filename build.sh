@@ -55,7 +55,13 @@ fi
 echo "==> 完成"
 ls -la "$DIST/$PKG_NAME/"
 echo
-echo "把 $DIST/$PKG_NAME 整个文件夹放进 Sea Power_Data/StreamingAssets/ 即可。"
+echo
+echo "上传工坊用游戏目录里的这个文件夹（Steam 要求上传的必须是"
+echo "StreamingAssets 根目录下的子文件夹，不能用 dist 里的副本）："
+echo "  $GAME_DIR/Sea Power_Data/StreamingAssets/$PKG_NAME"
+echo
+echo "build.sh 只产出 dist/，不会自动部署。要上传请把它的内容"
+echo "手动复制到上面那个目录，两者保持一致。"
 
 # ---------------------------------------------------------------------
 # 音乐扩展包
