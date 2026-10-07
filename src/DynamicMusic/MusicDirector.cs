@@ -918,12 +918,22 @@ namespace SeaPowerDynamicMusic
 
             int matched = 0;
             int missed = 0;
+            MusicTrack sample = null;
 
             foreach (var kv in ini.GetSection("Tracks"))
             {
                 // 值的格式：分类|权重|优先级|排除|路径
                 string[] parts = kv.Value.Split('|');
                 if (parts.Length < 5) continue;
+
+                // 配置行形如：Track01=T73487210=Nato|1|3|0|路径
+                // 第一个 = 左边是 IniFile 生成的序号键（Track01…），
+                // 右边的 T73487210 才是我们写入的路径哈希键。
+                // 用 '=' 切出最后一段才是真正的归属字段。
+                string field0 = parts[0];
+                int eq = field0.LastIndexOf('=');
+                if (eq >= 0) field0 = field0.Substring(eq + 1);
+                field0 = field0.Trim();
 
                 string path = parts[4].Trim();
                 MusicTrack track = lib.GetTrack(path);
@@ -936,12 +946,13 @@ namespace SeaPowerDynamicMusic
                         "配置路径未匹配: {0}", path));
                     continue;
                 }
+                if (sample == null) sample = track;
                 matched++;
 
                 string before = DescribeScenes(track);
 
                 track.Scenes.Clear();
-                foreach (string name in parts[0].Split(','))
+                foreach (string name in field0.Split(','))
                 {
                     MusicScene s;
                     if (Enum.TryParse(name.Trim(), true, out s)) track.Scenes.Add(s);
@@ -974,6 +985,14 @@ namespace SeaPowerDynamicMusic
             Plugin.LogInfo(string.Format(
                 "已从配置读回 {0} 首曲目的设置，未匹配 {1} 首",
                 matched, missed));
+
+                if (sample != null)
+                {
+                    Plugin.LogInfo(string.Format(
+                        "抽查解析: {0} -> 归属 {1}",
+                        System.IO.Path.GetFileName(sample.FilePath),
+                        DescribeScenes(sample)));
+                }
         }
 
         public void ApplySettings(MusicSettings s)
