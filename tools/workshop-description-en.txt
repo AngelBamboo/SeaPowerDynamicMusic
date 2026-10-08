@@ -1,8 +1,116 @@
-Music that follows the game: it switches by itself between the main menu, strategic map, in-mission and mission results.
+GitHub: https://github.com/AngelBamboo/SeaPowerDynamicMusic
 
-Press F7 in game to open the panel. You can audition tracks, adjust weight and priority, pause, scrub and rescan. The panel speaks Chinese or English and follows the game language by default.
+# Custom Dynamic Music
 
-The 22 official tracks that ship with the game can be used straight away. They reuse audio the game has already loaded, so nothing extra is downloaded. You can also drop your own mp3 / ogg / wav / aiff files into the category folders under MusicLibrary, or install the Dynamic Music Pack.
+Enables custom background music in Sea Power: Naval Combat in the Missile Age.
 
-Requires Anchor Chain:
-https://steamcommunity.com/sharedfiles/filedetails/?id=3380210757
+The library loads the 22 official tracks automatically. You can also add and play your own music by following the tutorial below.
+
+## Installation
+
+### Step 1: Install Anchor Chain
+
+This mod depends on Anchor Chain, the community mod loader. There are two actions, and the order must not be reversed:
+
+1. Download the latest `ACPreloader.zip` from [GitHub Releases](https://github.com/SeaPower-Modders/AnchorChain/releases) and extract it into the game root directory (the same level as `Sea Power.exe`). After extracting you should see `BepInEx`, `winhttp.dll` and `doorstop_config.ini`.
+2. Run the game once so BepInEx generates its configuration files.
+3. Subscribe to [Anchor Chain](https://steamcommunity.com/sharedfiles/filedetails/?id=3380210757) on the Workshop.
+
+### Step 2: Install this mod
+
+Just subscribe on the Workshop. No other action is needed.
+
+### Prefer manual installation?
+
+Put the whole `SeaPowerDynamicMusic` folder into `Sea Power_Data\StreamingAssets\`, and make sure Anchor Chain is installed. You can also just put `SeaPowerDynamicMusic.dll` into `BepInEx\plugins\`; it has its own BepInEx entry point and does not rely on Anchor Chain for configuration management.
+
+## Adding your own music
+
+Find `Sea Power_Data` in the game root directory and create a folder named `MusicLibrary`.
+
+Inside it you can create one folder per scene (MainMenu, StrategicMap, Nato, WP, Night, Victory, Defeat) and sort your favourite music into these subfolders:
+
+```
+Sea Power\
+  MusicLibrary\
+    MainMenu\        Main menu
+    StrategicMap\    Strategic map, campaign screen
+    Nato\            NATO
+    WP\              Warsaw Pact
+    Night\           Night
+    Victory\         Mission victory
+    Defeat\          Mission defeat
+```
+
+Chinese folder names are also accepted: `主菜单`, `战略地图`, `北约`, `华约`, `夜间` or `夜晚`, `胜利`, `失败`.
+
+**Supported formats**: `.mp3`, `.ogg`, `.wav`, `.aiff`, `.aif`. ogg or mp3 is recommended, as they are smaller with less quality loss.
+
+Dropping audio files directly into the `MusicLibrary` root also works, but those tracks will not play. They appear under "Unassigned" in the panel and you have to assign their category manually.
+
+**No restart is needed.** Press F7 to open the panel and click "Rescan".
+
+## Usage
+
+Press **F7** in game to open the manager panel.
+
+The panel has three columns, narrowing from left to right:
+
+| Column | Contents |
+|---|---|
+| First | Category: interface music, mission music, results music |
+| Second | Scene: main menu and strategic map, or NATO, Warsaw Pact and night, or victory and defeat |
+| Third | All tracks in that scene |
+
+What you can do on each row of the third column:
+
+| Action | Effect |
+|---|---|
+| Click the track name | Audition |
+| Checkbox | Enable or disable this track |
+| Weight 0~3 | Chance of being picked; higher means more likely. 0 means it does not participate |
+| Priority 0~5 | Higher numbers play first. Only the highest priority level is used, and the mod drops to the next level once every track in that level has played |
+| Category assignment | Choose which scenes this track appears in; a track can belong to several at once |
+
+**Weighted Random** (bottom left of the panel) decides how a track is chosen when several candidates are available:
+
+- **On**: draws at random by each track's weight. Setting every weight to 1.0 gives an equal chance.
+- **Off**: loops in list order, and weight has no effect.
+
+Click "Save" when you are done. "Rescan" saves first, then reloads.
+
+## Features
+
+**Follows game state.** Watches the game's own scene change signal; when the screen changes the music follows. No manual switching needed.
+
+**Official music works out of the box.** Tracks marked `[官方]` in the panel are the game's own. They reuse audio the game has already loaded, so no files are copied and no extra memory is used. There are 22 of them, covering interface, mission and results.
+
+**One track can serve several categories.** The same track can be assigned to both "NATO" and "Night" by ticking the boxes under category assignment.
+
+**Weight and priority.** Weight decides the chance of being picked; priority decides playback order. Within one level every track plays once before the mod drops to the next.
+
+**The same track never repeats.** The track currently playing does not take part in the next draw.
+
+**Automatic fallback.** If Warsaw Pact has no tracks, NATO steps in; if the interface has none, the mission music does. Playback never goes silent unexpectedly.
+
+**Official music as a safety net.** If you have no tracks of your own in a scene, the mod falls back to the matching official music.
+
+**One click back to vanilla.** Click "Vanilla Mode" in the panel to hand everything back to the game, and switch back whenever you want.
+
+**Chinese and English UI.** Toggle in the top left corner; follows the game language the first time it opens.
+
+**Crossfade between scenes.** Uses two audio sources to cross-fade, so tracks never cut off abruptly.
+
+## Known issues
+
+**Mouse clicks pass through to the game.** When you press a panel button, the click sometimes reaches the game as well. In combat this means that selecting a target or issuing an order may also register a click on the panel. No reliable workaround has been found; if this bothers you, try opening the panel from the menus.
+
+**Switching vanilla mode sometimes does not take effect.** After clicking "Vanilla Mode" the game's music may not stop right away, or after leaving vanilla mode the mod's music may not resume immediately. Clicking again usually fixes it.
+
+**The Workshop music pack has to be installed separately.** This mod contains no audio files at all. After subscribing to the pack, its tracks appear in the panel and play alongside your own music.
+
+**The mission transition delay is by design.** The mod waits 3 seconds before switching to tense music after contact is detected, and 25 seconds before switching back after combat ends, so that a brief alert does not cut the music off and a lull in combat is not interrupted. These values can be changed in the configuration file.
+
+## Note
+
+This is a community mod and is not affiliated with Triassic Games. All ownership of the game's built-in music belongs to Triassic Games; this mod only references it and neither copies nor distributes any official audio files.
