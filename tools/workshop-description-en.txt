@@ -26,7 +26,7 @@ Put the whole `SeaPowerDynamicMusic` folder into `Sea Power_Data\StreamingAssets
 
 ## Adding your own music
 
-Find `Sea Power_Data` in the game root directory and create a folder named `MusicLibrary`.
+In the **game root directory `Sea Power`**, create a folder named `MusicLibrary`, then add one subfolder per scene:
 
 Inside it you can create one folder per scene (MainMenu, StrategicMap, Nato, WP, Night, Victory, Defeat) and sort your favourite music into these subfolders:
 
@@ -41,6 +41,8 @@ Sea Power\
     Victory\         Mission victory
     Defeat\          Mission defeat
 ```
+
+**Note the location:** `MusicLibrary` goes in the game root directory, the same level as `Sea Power.exe`, **not** inside `Sea Power_Data`.
 
 Chinese folder names are also accepted: `主菜单`, `战略地图`, `北约`, `华约`, `夜间` or `夜晚`, `胜利`, `失败`.
 
